@@ -4,6 +4,7 @@ import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { SidebarNav } from '../components/layout/SidebarNav';
 import { TopNavBar } from '../components/layout/TopNavBar';
 import { showToast, hideToast } from '../store/slices/uiSlice';
+import { fetchStudyData } from '../store/slices/studySlice';
 import { useIsLight } from '../hooks/useIsLight';
 
 export default function AppLayout() {
@@ -26,6 +27,13 @@ export default function AppLayout() {
       return () => clearTimeout(timer);
     }
   }, [toast.visible, dispatch]);
+
+  // Fetch Study Data on app load if authenticated
+  useEffect(() => {
+    if (user && user.token) {
+      dispatch(fetchStudyData());
+    }
+  }, [user, dispatch]);
 
   // Redirect if not authenticated
   if (!user) {

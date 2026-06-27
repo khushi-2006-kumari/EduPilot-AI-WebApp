@@ -21,7 +21,7 @@ const LIGHT = {
   footerBg: '#ede9f5',
 };
 
-const questions = [
+const ALL_QUESTIONS = [
   {
     q: 'What is the time complexity of binary search on a sorted array of N elements?',
     options: ['O(n)', 'O(log n)', 'O(n log n)', 'O(1)'],
@@ -132,10 +132,16 @@ export default function ActiveMockTestPage() {
   const C = isLight ? LIGHT : DARK;
 
   const subjectName = location.state?.subject || 'Data Structures';
+  const timeLimitStr = location.state?.timeLimit || '30m';
+  const initialTime = parseInt(timeLimitStr.replace('m', '')) * 60 || 30 * 60;
+  const qCount = location.state?.qCount || 20;
+
+  const generatedQuestions = location.state?.questions || ALL_QUESTIONS;
+  const questions = generatedQuestions.slice(0, Math.min(qCount, generatedQuestions.length));
 
   const [currentQ, setCurrentQ] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState(Array(questions.length).fill(null));
-  const [timeLeft, setTimeLeft] = useState(30 * 60); // 30 minutes
+  const [timeLeft, setTimeLeft] = useState(initialTime);
   const [panelOpen, setPanelOpen] = useState(true);
 
   useEffect(() => {

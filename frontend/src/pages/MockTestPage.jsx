@@ -32,38 +32,15 @@ export default function MockTestPage() {
   const [focusPYQ, setFocusPYQ] = useState(false);
   const [focusHigh, setFocusHigh] = useState(true);
   const [activeFormat, setActiveFormat] = useState(['mcq']);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const toggleFormat = (key) => {
     setActiveFormat(p => p.includes(key) ? p.filter(k => k !== key) : [...p, key]);
   };
 
-  const allSubjectsOption = { icon: 'grid_view', label: 'All Subjects', sub: 'Adaptive Mix', tag: 'Global Sync', tagBg: C.surfaceHighest, border: 'transparent', iconColor: C.primaryDim };
-  
-  const dynamicSubjects = generatedPlan?.units?.map((u, i) => ({
-    icon: i === 0 ? 'account_tree' : i === 1 ? 'functions' : 'memory',
-    label: u.label.split(': ')[1] || u.label,
-    sub: u.count,
-    tag: i === 0 ? 'Mastered' : 'Needs Focus',
-    tagBg: i === 0 ? 'rgba(34,197,94,0.1)' : 'rgba(255,180,171,0.1)',
-    tagColor: i === 0 ? '#4ade80' : C.error,
-    border: i === 0 ? '#7C3AED' : C.secondary,
-    lastScore: i === 0 ? '94%' : '62%',
-    scoreColor: i === 0 ? '#7C3AED' : C.secondary,
-    iconColor: i === 0 ? '#7C3AED' : C.secondary
-  })) || [
-    { icon: 'account_tree', label: 'Data Structures', sub: '24 Topics Available', tag: 'Stable', tagBg: 'rgba(34,197,94,0.1)', tagColor: '#4ade80', border: C.primaryDim, lastScore: '88%', scoreColor: C.primaryDim },
-    { icon: 'functions', label: 'Maths', sub: '18 Topics Available', tag: 'Needs Focus', tagBg: 'rgba(255,180,171,0.1)', tagColor: C.error, border: C.secondary, lastScore: '62%', scoreColor: C.secondary },
-    { icon: 'memory', label: 'Electronics', sub: '12 Topics Available', tag: 'Average', tagBg: C.surfaceHighest, tagColor: C.outline, border: C.tertiary, lastScore: '75%', scoreColor: C.tertiary },
-    { icon: 'terminal', label: 'Algorithms', sub: '30 Topics Available', tag: 'Mastered', tagBg: 'rgba(34,197,94,0.1)', tagColor: '#4ade80', border: '#7C3AED', lastScore: '94%', scoreColor: '#7C3AED' },
-  ];
+  const [difficulty, setDifficulty] = useState('Mixed (Recommended)');
 
-  const displaySubjects = [allSubjectsOption, ...dynamicSubjects];
 
-  const historyCards = [
-    { subject: 'Algorithms', subjectColor: C.primaryDim, subjectBg: 'rgba(210,187,255,0.1)', score: '92%', change: '+4% improved', changeColor: '#4ade80', time: '2d ago', duration: '42m 15s', answers: '18/20', isPrimary: false },
-    { subject: 'Calculus III', subjectColor: C.secondary, subjectBg: 'rgba(206,189,255,0.1)', score: '58%', change: '-12% dropped', changeColor: C.error, time: '4d ago', duration: '58m 04s', answers: '11/20', isPrimary: true },
-    { subject: 'Electronics', subjectColor: C.tertiary, subjectBg: 'rgba(201,196,217,0.1)', score: '78%', change: 'First attempt', changeColor: C.outline, time: '1w ago', duration: '35m 12s', answers: '15/20', isPrimary: false },
-  ];
 
   const pyqTopics = generatedPlan?.units?.[0]?.topics?.slice(0, 4).map((t, i) => ({
     name: t.name,
@@ -73,12 +50,7 @@ export default function MockTestPage() {
     tag: i % 2 === 0 ? 'Priority' : 'Steady',
     tagColor: i % 2 === 0 ? C.primaryDim : C.outline,
     tagBg: i % 2 === 0 ? 'rgba(124,58,237,0.1)' : C.surfaceHighest
-  })) || [
-    { name: 'Dynamic Programming', sub: 'Knapsack, LCS Variants', trend: 'trending_up', trendColor: C.primaryDim, tag: 'Priority', tagColor: C.primaryDim, tagBg: 'rgba(124,58,237,0.1)' },
-    { name: 'Binary Search Trees', sub: 'AVLs & Balancing', trend: 'trending_flat', trendColor: C.outline, tag: 'Steady', tagColor: C.outline, tagBg: C.surfaceHighest },
-    { name: 'Graph Theory', sub: 'Dijkstra, MST', trend: 'trending_up', trendColor: C.primaryDim, tag: 'Priority', tagColor: C.primaryDim, tagBg: 'rgba(124,58,237,0.1)' },
-    { name: 'Red-Black Trees', sub: 'Complex Operations', trend: 'trending_down', trendColor: C.error, tag: 'Niche', tagColor: C.error, tagBg: 'rgba(255,180,171,0.1)' },
-  ];
+  })) || [];
 
   return (
     <div style={{ color: C.onSurface, fontFamily: "'Inter', sans-serif" }}>
@@ -98,51 +70,14 @@ export default function MockTestPage() {
 
       {/* Subject Selector */}
       <div style={{ marginBottom: 32 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ fontFamily: "'Inter'", fontSize: 20, fontWeight: 700, margin: 0, color: C.onSurface }}>Select Subject</h3>
-          <button style={{ color: C.primaryDim, fontSize: 14, background: 'none', border: 'none', cursor: 'pointer' }}>View All</button>
-        </div>
-        <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 16, scrollbarWidth: 'none' }}>
-          {displaySubjects.map((s, i) => {
-            const isSelected = selectedSubject === s.label;
-            return (
-              <div 
-                key={i} 
-                onClick={() => {
-                  setSelectedSubject(s.label);
-                  dispatch(showToast(`Selected subject: ${s.label}`));
-                }}
-                style={{ 
-                  minWidth: 200, 
-                  flexShrink: 0, 
-                  padding: 20, 
-                  borderRadius: 12, 
-                  background: isSelected ? C.surfaceHigh : C.surfaceContainer, 
-                  border: isSelected ? `2px solid ${C.primary}` : `1px solid ${C.outlineVar}`, 
-                  borderLeft: isSelected ? `6px solid ${C.primary}` : (s.border !== 'transparent' ? `4px solid ${s.border}` : `1px solid ${C.outlineVar}`), 
-                  cursor: 'pointer', 
-                  transition: 'all 0.2s',
-                  boxShadow: isSelected ? `0 0 15px ${C.primary}33` : 'none'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 8, background: `${s.iconColor}1a`, display: 'flex', alignItems: 'center', justifycontent: 'center', color: s.iconColor }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>{s.icon}</span>
-                  </div>
-                  {s.lastScore && (
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ display: 'block', fontSize: 10, color: C.outline, textTransform: 'uppercase', fontWeight: 700 }}>Last Score</span>
-                      <span style={{ fontWeight: 700, color: s.scoreColor }}>{s.lastScore}</span>
-                    </div>
-                  )}
-                </div>
-                <h4 style={{ fontWeight: 700, color: C.onSurface, margin: '0 0 4px 0', fontSize: 14 }}>{s.label}</h4>
-                <p style={{ fontSize: 12, color: C.outline, marginBottom: 12 }}>{s.sub}</p>
-                <span style={{ padding: '2px 8px', background: s.tagBg || C.surfaceHighest, color: s.tagColor || C.onSurface, fontSize: 10, borderRadius: 999, border: `1px solid ${s.tagBg ? s.tagColor || C.outlineVar : C.outlineVar}` }}>{s.tag}</span>
-              </div>
-            );
-          })}
-        </div>
+        <h3 style={{ fontFamily: "'Inter'", fontSize: 20, fontWeight: 700, margin: '0 0 16px 0', color: C.onSurface }}>Enter Subject</h3>
+        <input 
+          type="text" 
+          value={selectedSubject === 'All Subjects' ? '' : selectedSubject}
+          onChange={e => setSelectedSubject(e.target.value)}
+          placeholder="e.g. Data Structures, React.js, Quantum Physics..."
+          style={{ width: '100%', padding: '16px', background: C.surfaceContainer, border: `1px solid ${C.outlineVar}`, borderRadius: 12, color: C.onSurface, fontSize: 16, outline: 'none', fontFamily: "'Inter', sans-serif" }}
+        />
       </div>
 
       {/* Config + PYQ */}
@@ -167,7 +102,7 @@ export default function MockTestPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.outline, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 12 }}>Difficulty</label>
-                <select style={{ width: '100%', background: C.surfaceLowest, border: `1px solid ${C.outlineVar}`, borderRadius: 8, padding: '8px 12px', color: C.onSurface, fontSize: 14 }}>
+                <select value={difficulty} onChange={e => setDifficulty(e.target.value)} style={{ width: '100%', background: C.surfaceLowest, border: `1px solid ${C.outlineVar}`, borderRadius: 8, padding: '8px 12px', color: C.onSurface, fontSize: 14 }}>
                   <option>Mixed (Recommended)</option>
                   <option>Beginner</option>
                   <option>Intermediate</option>
@@ -214,14 +149,50 @@ export default function MockTestPage() {
             </div>
           </div>
           <button 
-            onClick={() => navigate('/mocktest/active', { state: { subject: selectedSubject } })} 
-            style={{ width: '100%', padding: '20px', background: '#7C3AED', color: '#fff', borderRadius: 12, fontWeight: 700, fontSize: 18, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, transition: 'background 0.2s' }}
-            onMouseEnter={e => e.currentTarget.style.background = '#6D28D9'}
-            onMouseLeave={e => e.currentTarget.style.background = '#7C3AED'}
+            disabled={isGenerating}
+            onClick={async () => {
+              if (!selectedSubject || selectedSubject === 'All Subjects') {
+                dispatch(showToast('Please enter a subject name first!'));
+                return;
+              }
+              setIsGenerating(true);
+              dispatch(showToast('Generating AI Mock Test... Please wait.'));
+              try {
+                const response = await fetch('http://localhost:5000/api/mocktest/generate', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ subject: selectedSubject, difficulty, qCount })
+                });
+                const data = await response.json();
+                if (data.success && data.questions) {
+                  dispatch(showToast('Test generated successfully!'));
+                  navigate('/mocktest/active', { state: { subject: selectedSubject, timeLimit, qCount, difficulty, questions: data.questions } });
+                } else {
+                  dispatch(showToast(data.message || 'Failed to generate test.'));
+                }
+              } catch (error) {
+                console.error(error);
+                dispatch(showToast('Error connecting to AI Server.'));
+              } finally {
+                setIsGenerating(false);
+              }
+            }} 
+            style={{ width: '100%', padding: '20px', background: isGenerating ? C.outlineVar : '#7C3AED', color: '#fff', borderRadius: 12, fontWeight: 700, fontSize: 18, border: 'none', cursor: isGenerating ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, transition: 'background 0.2s' }}
+            onMouseEnter={e => !isGenerating && (e.currentTarget.style.background = '#6D28D9')}
+            onMouseLeave={e => !isGenerating && (e.currentTarget.style.background = '#7C3AED')}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 24 }}>auto_awesome</span>
-            Generate Test with AI
-            <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_forward</span>
+            {isGenerating ? (
+              <>
+                <span className="material-symbols-outlined" style={{ fontSize: 24, animation: 'spin 1s linear infinite' }}>autorenew</span>
+                Generating...
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined" style={{ fontSize: 24 }}>auto_awesome</span>
+                Generate Test with AI
+                <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_forward</span>
+              </>
+            )}
           </button>
         </div>
 
@@ -251,7 +222,7 @@ export default function MockTestPage() {
           </div>
           <p style={{ fontSize: 12, fontWeight: 700, color: C.outline, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 12 }}>High-Yield Topics</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-            {pyqTopics.map((t, i) => (
+            {pyqTopics.length > 0 ? pyqTopics.map((t, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', borderRadius: 8, border: '1px solid transparent', transition: 'background 0.2s', cursor: 'pointer' }}
                 onMouseEnter={e => { e.currentTarget.style.background = C.surfaceHigh; e.currentTarget.style.borderColor = C.outlineVar; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
@@ -265,64 +236,16 @@ export default function MockTestPage() {
                   <span style={{ padding: '2px 8px', background: t.tagBg, color: t.tagColor, fontSize: 10, borderRadius: 999, border: `1px solid ${t.tagColor}4d` }}>{t.tag}</span>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div style={{ padding: '24px', textAlign: 'center', color: C.outline, background: C.surfaceLowest, borderRadius: 8, border: `1px dashed ${C.outlineVar}`, marginTop: 8 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 24, marginBottom: 8, color: C.outlineVar }}>upload_file</span>
+                <p style={{ fontSize: 14, margin: 0 }}>Analyze a syllabus to unlock AI topic predictions.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Recent Performance */}
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h3 style={{ fontFamily: "'Inter'", fontSize: 20, fontWeight: 700, margin: 0, color: C.onSurface }}>Recent Performance</h3>
-          <button style={{ padding: 8, background: C.surfaceHigh, border: `1px solid ${C.outlineVar}`, borderRadius: 8, cursor: 'pointer', color: C.outline, display: 'flex', alignItems: 'center', transition: 'background 0.2s' }}
-            onMouseEnter={e => e.currentTarget.style.background = C.surfaceHighest}
-            onMouseLeave={e => e.currentTarget.style.background = C.surfaceHigh}
-            onClick={() => dispatch(showToast('Filters updated!'))}
-          >
-            <span className="material-symbols-outlined">filter_list</span>
-          </button>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
-          {historyCards.map((card, i) => (
-            <div key={i} style={{ padding: 20, borderRadius: 12, background: C.surfaceContainer, border: `1px solid ${C.outlineVar}`, transition: 'border-color 0.2s' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                <span style={{ padding: '2px 8px', background: card.subjectBg, color: card.subjectColor, fontSize: 10, fontWeight: 700, borderRadius: 4, textTransform: 'uppercase' }}>{card.subject}</span>
-                <span style={{ fontSize: 12, color: C.outline }}>{card.time}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 16 }}>
-                <span style={{ fontFamily: "'Inter'", fontSize: 32, fontWeight: 700, color: C.onSurface }}>{card.score}</span>
-                <span style={{ fontSize: 12, color: card.changeColor, marginBottom: 4 }}>{card.change}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.outline, marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>timer</span>
-                  {card.duration}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>task_alt</span>
-                  {card.answers}
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <button
-                  onClick={() => navigate('/mocktest/results')}
-                  style={{ padding: '8px', fontSize: 11, fontWeight: 700, border: `1px solid ${C.outlineVar}`, borderRadius: 12, background: C.surfaceContainer, color: C.onSurface, cursor: 'pointer', transition: 'all 0.2s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = C.surfaceHigh}
-                  onMouseLeave={e => e.currentTarget.style.background = C.surfaceContainer}
-                >Review</button>
-                <button onClick={() => navigate('/mocktest/active')} style={{ padding: '8px', fontSize: 11, fontWeight: 700, border: `1px solid ${card.isPrimary ? '#7C3AED' : 'rgba(210,187,255,0.3)'}`, borderRadius: 6, background: card.isPrimary ? '#7C3AED' : 'rgba(124,58,237,0.1)', color: card.isPrimary ? '#fff' : C.primaryDim, cursor: 'pointer' }}>Retake</button>
-              </div>
-            </div>
-          ))}
-          <div style={{ padding: 20, borderRadius: 12, background: C.surfaceContainer, border: `1px solid ${C.outlineVar}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', cursor: 'pointer' }}>
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: C.surfaceHighest, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 24, color: C.outline }}>history</span>
-            </div>
-            <p style={{ fontWeight: 700, fontSize: 14, color: C.onSurface }}>View All History</p>
-            <p style={{ fontSize: 10, color: C.outline, marginTop: 4 }}>12 tests taken this month</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -17,7 +17,10 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/syllabus', require('./routes/syllabusRoutes'));
 app.use('/api/notes', require('./routes/notesRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/mocktest', require('./routes/mockTestRoutes'));
+app.use('/api/studydata', require('./routes/studyDataRoutes'));
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+

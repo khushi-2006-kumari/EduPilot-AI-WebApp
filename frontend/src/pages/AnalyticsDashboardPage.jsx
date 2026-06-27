@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { useIsLight } from '../hooks/useIsLight';
@@ -18,33 +18,7 @@ const LIGHT = {
   heatEmpty: '#ece8f2',
 };
 
-const heatmapData = [1,1,2,1,0,3,3,3,3,1,3,3,0,2,2,3,3,3,1,2,2,2,1,3,2,2,3,2,0,0,1,2,1,3,3,0,0,2,1,0,3,0,1,2,0];
-
-const subjects = (C) => [
-  { label: 'Algorithms', pct: 90, color: C.primaryDim, dot: C.primaryDim },
-  { label: 'Data Structures', pct: 85, color: C.secondary, dot: C.secondary },
-  { label: 'Discrete Maths', pct: 72, color: C.tertiary, dot: C.tertiary },
-  { label: 'Electronics', pct: 68, color: C.error, dot: C.error },
-];
-
-const syllabusRows = [
-  { name: 'Computer Science II', total: 92, completed: 70, inProgress: 22 },
-  { name: 'Advanced Calculus', total: 45, completed: 20, inProgress: 25 },
-  { name: 'Physical Electronics', total: 31, completed: 10, inProgress: 21 },
-];
-
-const achievements = (C) => [
-  { icon: 'workspace_premium', color: C.primaryDim, active: true },
-  { icon: 'local_fire_department', color: C.secondary, active: true },
-  { icon: 'military_tech', color: C.onSurfaceVar, active: false },
-  { icon: 'school', color: C.onSurfaceVar, active: false },
-];
-
-const efficiencyRings = [
-  { label: 'Consistency', pct: 85, offset: 26 },
-  { label: 'Coverage', pct: 72, offset: 49 },
-  { label: 'Revision', pct: 65, offset: 61 },
-];
+const heatColors = (C) => [C.heatEmpty, `rgba(124,58,237,0.3)`, `rgba(124,58,237,0.6)`, '#7c3aed'];
 
 export default function AnalyticsDashboardPage() {
   const [period, setPeriod] = useState('month');
@@ -52,27 +26,80 @@ export default function AnalyticsDashboardPage() {
   const isLight = useIsLight();
   const C = isLight ? LIGHT : DARK;
 
-  const generatedPlan = useSelector(state => state.study.generatedPlan);
+  const studyState = useSelector(state => state.study);
+  const { studyStats = {}, syllabus = {}, mockTests = {}, recentSessions = [], streakCount = 0 } = studyState;
+  
+  const topics = syllabus?.topics || [];
+  const totalTopics = topics.length;
+  const completedTopics = topics.filter(t => t.status === 'mastered').length;
+  const inProgressTopics = topics.filter(t => t.status === 'needs-review' || t.status === 'in-progress').length;
+  const topicProgressPct = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
 
-  const dynamicSubjects = generatedPlan?.units?.map((u, i) => ({
-    label: u.label.split(': ')[1] || u.label,
-    pct: [90, 85, 72, 68, 55][i % 5],
-    color: [C.primaryDim, C.secondary, C.tertiary, C.error, C.primary][i % 5],
-    dot: [C.primaryDim, C.secondary, C.tertiary, C.error, C.primary][i % 5]
-  })) || subjects(C);
+  // Dynamic Subject Mastery
+  const subjectMap = topics.reduce((acc, t) => {
+    if(!acc[t.subject]) acc[t.subject] = { total: 0, completed: 0, inProgress: 0 };
+    acc[t.subject].total += 1;
+    if(t.status === 'mastered') acc[t.subject].completed += 1;
+    if(t.status === 'needs-review' || t.status === 'in-progress') acc[t.subject].inProgress += 1;
+    return acc;
+  }, {});
 
-  const dynamicSyllabusRows = generatedPlan?.units?.slice(0, 3).map((u, i) => ({
-    name: u.label.split(': ')[1] || u.label,
-    total: [92, 45, 31][i % 3],
-    completed: [70, 20, 10][i % 3],
-    inProgress: [22, 25, 21][i % 3]
-  })) || syllabusRows;
+  const dynamicSubjects = Object.keys(subjectMap).map((sub, i) => {
+    const s = subjectMap[sub];
+    return {
+      label: sub,
+      pct: Math.round((s.completed / s.total) * 100),
+      color: [C.primaryDim, C.secondary, C.tertiary, C.error, C.primary][i % 5],
+      dot: [C.primaryDim, C.secondary, C.tertiary, C.error, C.primary][i % 5]
+    };
+  });
 
-  const aiComment = generatedPlan?.units?.[0]?.label 
-    ? `"Your momentum in ${generatedPlan.units[0].label.split(': ')[1] || generatedPlan.units[0].label} is exceptional. I suggest allocating more time to your weaker topics over the next 48 hours to balance your averages."`
-    : `"Your momentum in Algorithms is exceptional. I suggest allocating 25% more time to Electronics over the next 48 hours to balance your midterm averages."`;
+  const dynamicSyllabusRows = Object.keys(subjectMap).map(sub => {
+    const s = subjectMap[sub];
+    return {
+      name: sub,
+      total: Math.round((s.completed / s.total) * 100) || 0,
+      completed: Math.round((s.completed / s.total) * 100) || 0,
+      inProgress: Math.round((s.inProgress / s.total) * 100) || 0
+    };
+  });
 
-  const heatColors = [C.heatEmpty, `rgba(79,49,156,0.4)`, `rgba(79,49,156,0.7)`, '#7c3aed'];
+  // Calculate Overall Score from Past Results
+  const pastResults = mockTests?.pastResults || [];
+  const avgTestScore = pastResults.length > 0 
+    ? Math.round(pastResults.reduce((acc, r) => acc + r.score, 0) / pastResults.length)
+    : (syllabus?.overallScore || 0);
+
+  // Productivity / Focus
+  const productivityScore = studyStats?.avgFocus || 0;
+  const productivityLabel = productivityScore > 80 ? 'Exceptional' : productivityScore > 50 ? 'Good' : 'Needs Focus';
+
+  const aiComment = dynamicSubjects.length > 0
+    ? `"Your momentum in ${dynamicSubjects[0].label} is strong. I suggest allocating more time to your weaker topics over the next 48 hours to balance your averages."`
+    : `"Analyze a syllabus or take a mock test to get personalized insights."`;
+
+  const achievements = [
+    { icon: 'workspace_premium', color: C.primaryDim, active: completedTopics > 0 },
+    { icon: 'local_fire_department', color: C.secondary, active: streakCount > 2 },
+    { icon: 'military_tech', color: C.onSurfaceVar, active: avgTestScore > 80 },
+    { icon: 'school', color: C.onSurfaceVar, active: totalTopics > 50 },
+  ];
+
+  const efficiencyRings = [
+    { label: 'Consistency', pct: Math.min(100, streakCount * 10), offset: 176 - (176 * Math.min(100, streakCount * 10) / 100) },
+    { label: 'Coverage', pct: topicProgressPct, offset: 176 - (176 * topicProgressPct / 100) },
+    { label: 'Avg Score', pct: avgTestScore, offset: 176 - (176 * avgTestScore / 100) },
+  ];
+
+  // Dummy Heatmap generator based on recent sessions
+  const heatmapData = useMemo(() => {
+    const data = Array(45).fill(0);
+    const recentCount = Math.min(recentSessions.length, 45);
+    for(let i=0; i<recentCount; i++) {
+      data[44 - i] = Math.floor(Math.random() * 3) + 1; // Fake intensity for recent days
+    }
+    return data;
+  }, [recentSessions]);
 
   return (
     <div style={{ color: C.onSurface, fontFamily: "'Inter', sans-serif" }}>
@@ -95,11 +122,11 @@ export default function AnalyticsDashboardPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 24, marginBottom: 32 }}>
         <div style={{ background: C.surfaceContainer, padding: 24, borderRadius: 12, border: `1px solid ${C.outlineVar}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-            <span style={{ fontSize: 14, color: C.onSurfaceVar }}>Overall Score</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: C.primaryDim, background: 'rgba(124,58,237,0.1)', padding: '2px 8px', borderRadius: 999 }}>+2.4%</span>
+            <span style={{ fontSize: 14, color: C.onSurfaceVar }}>Avg Test Score</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: C.primaryDim, background: 'rgba(124,58,237,0.1)', padding: '2px 8px', borderRadius: 999 }}>{pastResults.length} Tests</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
-            <h3 style={{ fontFamily: "'Inter'", fontSize: 40, fontWeight: 700, margin: 0 }}>82%</h3>
+            <h3 style={{ fontFamily: "'Inter'", fontSize: 40, fontWeight: 700, margin: 0 }}>{avgTestScore}%</h3>
             <div style={{ flex: 1, height: 48, display: 'flex', alignItems: 'flex-end', gap: 3, paddingBottom: 4 }}>
               {[0.3,0.5,0.65,1,0.75].map((h, i) => (
                 <div key={i} style={{ flex: 1, background: `rgba(124,58,237,${h})`, borderRadius: '3px 3px 0 0', height: `${h * 48}px` }} />
@@ -109,11 +136,11 @@ export default function AnalyticsDashboardPage() {
         </div>
         <div style={{ background: C.surfaceContainer, padding: 24, borderRadius: 12, border: `1px solid ${C.outlineVar}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-            <span style={{ fontSize: 14, color: C.onSurfaceVar }}>Study Hours</span>
+            <span style={{ fontSize: 14, color: C.onSurfaceVar }}>Total Study Hours</span>
             <span className="material-symbols-outlined" style={{ color: C.primaryDim, fontSize: 20 }}>schedule</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
-            <h3 style={{ fontFamily: "'Inter'", fontSize: 40, fontWeight: 700, margin: 0 }}>48.5h</h3>
+            <h3 style={{ fontFamily: "'Inter'", fontSize: 40, fontWeight: 700, margin: 0 }}>{studyStats.totalHours || 0}h</h3>
             <div style={{ flex: 1, height: 40, marginBottom: 4 }}>
               <svg width="100%" height="40" preserveAspectRatio="none">
                 <path d="M0 30 Q20 10, 40 24 T80 16 T120 28 T160 12 T200 20" fill="none" stroke={C.primaryDim} strokeWidth="2" vectorEffect="non-scaling-stroke" />
@@ -124,24 +151,24 @@ export default function AnalyticsDashboardPage() {
         <div style={{ background: C.surfaceContainer, padding: 24, borderRadius: 12, border: `1px solid ${C.outlineVar}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
             <span style={{ fontSize: 14, color: C.onSurfaceVar }}>Topics Completed</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: C.onSurfaceVar }}>34/85</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.onSurfaceVar }}>{completedTopics}/{totalTopics}</span>
           </div>
-          <h3 style={{ fontFamily: "'Inter'", fontSize: 40, fontWeight: 700, margin: '0 0 16px 0' }}>40%</h3>
+          <h3 style={{ fontFamily: "'Inter'", fontSize: 40, fontWeight: 700, margin: '0 0 16px 0' }}>{topicProgressPct}%</h3>
           <div style={{ height: 8, background: C.surfaceHighest, borderRadius: 999, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: '40%', background: '#7C3AED', borderRadius: 999 }} />
+            <div style={{ height: '100%', width: `${topicProgressPct}%`, background: '#7C3AED', borderRadius: 999 }} />
           </div>
         </div>
         <div style={{ background: C.surfaceContainer, padding: 24, borderRadius: 12, border: `1px solid ${C.outlineVar}`, display: 'flex', alignItems: 'center', gap: 24 }}>
           <div style={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
             <svg width="64" height="64" style={{ transform: 'rotate(-90deg)' }}>
               <circle cx="32" cy="32" r="28" fill="transparent" stroke={C.surfaceHighest} strokeWidth="6" />
-              <circle cx="32" cy="32" r="28" fill="transparent" stroke="#7c3aed" strokeDasharray="176" strokeDashoffset="38" strokeLinecap="round" strokeWidth="6" />
+              <circle cx="32" cy="32" r="28" fill="transparent" stroke="#7c3aed" strokeDasharray="176" strokeDashoffset={176 - (176 * productivityScore / 100)} strokeLinecap="round" strokeWidth="6" />
             </svg>
-            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.onSurface }}>78</span>
+            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.onSurface }}>{productivityScore}</span>
           </div>
           <div>
             <span style={{ fontSize: 14, color: C.onSurfaceVar, display: 'block', marginBottom: 4 }}>Productivity</span>
-            <h3 style={{ fontFamily: "'Inter'", fontSize: 22, fontWeight: 700, margin: 0 }}>Exceptional</h3>
+            <h3 style={{ fontFamily: "'Inter'", fontSize: 22, fontWeight: 700, margin: 0 }}>{productivityLabel}</h3>
           </div>
         </div>
       </div>
@@ -178,11 +205,11 @@ export default function AnalyticsDashboardPage() {
           <div style={{ borderTop: `1px solid ${C.outlineVar}`, paddingTop: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: C.onSurface }}>Study Consistency</span>
-              <span style={{ fontSize: 12, color: C.onSurfaceVar }}>Last 90 days</span>
+              <span style={{ fontSize: 12, color: C.onSurfaceVar }}>Last 45 days</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {heatmapData.map((val, i) => (
-                <div key={i} style={{ width: 12, height: 12, borderRadius: 2, background: heatColors[val] }} />
+                <div key={i} style={{ width: 12, height: 12, borderRadius: 2, background: heatColors(C)[val] }} />
               ))}
             </div>
           </div>
@@ -194,14 +221,10 @@ export default function AnalyticsDashboardPage() {
             <svg width="160" height="160" viewBox="0 0 100 100">
               {[45,30,15].map(r => <circle key={r} cx="50" cy="50" fill="none" r={r} stroke={C.outlineVar} strokeDasharray="2 2" strokeWidth="0.5" />)}
               <path d="M50 5 L85 25 L95 65 L50 95 L5 65 L15 25 Z" fill="rgba(124,58,237,0.2)" stroke="#7c3aed" strokeWidth="2" />
-              <text x="50" y="2" textAnchor="middle" style={{ fontSize: '6px', fill: C.onSurfaceVar }}>LOGIC</text>
-              <text x="98" y="52" textAnchor="start" style={{ fontSize: '6px', fill: C.onSurfaceVar }}>DATA</text>
-              <text x="50" y="100" textAnchor="middle" style={{ fontSize: '6px', fill: C.onSurfaceVar }}>ALGO</text>
-              <text x="0" y="52" textAnchor="end" style={{ fontSize: '6px', fill: C.onSurfaceVar }}>MATH</text>
             </svg>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {dynamicSubjects.map(s => (
+            {dynamicSubjects.length > 0 ? dynamicSubjects.map(s => (
               <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: s.dot }} />
@@ -209,7 +232,7 @@ export default function AnalyticsDashboardPage() {
                 </div>
                 <span style={{ fontWeight: 700, fontSize: 15, color: C.onSurface }}>{s.pct}%</span>
               </div>
-            ))}
+            )) : <p style={{color: C.onSurfaceVar, fontSize: 14, textAlign: 'center'}}>No subjects found. Add a syllabus to analyze mastery.</p>}
           </div>
         </div>
       </div>
@@ -230,7 +253,7 @@ export default function AnalyticsDashboardPage() {
           <div style={{ padding: 16, background: C.surfaceHigh, border: `1px solid ${C.outlineVar}`, borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <span style={{ fontSize: 10, color: C.onSurfaceVar, textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.12em' }}>Predicted Final</span>
-              <p style={{ fontFamily: "'Inter'", fontSize: 24, fontWeight: 700, color: C.primaryDim, margin: 0 }}>88.5%</p>
+              <p style={{ fontFamily: "'Inter'", fontSize: 24, fontWeight: 700, color: C.primaryDim, margin: 0 }}>{Math.min(100, avgTestScore + 5)}%</p>
             </div>
             <span className="material-symbols-outlined" style={{ color: '#7C3AED', fontSize: 28 }}>auto_awesome</span>
           </div>
@@ -264,23 +287,27 @@ export default function AnalyticsDashboardPage() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <div style={{ border: '1px solid #7C3AED', boxShadow: '0 0 15px rgba(124,58,237,0.2)', background: C.surfaceHigh, borderRadius: 12, padding: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-              <div style={{ padding: 8, background: 'rgba(147,0,10,0.2)', borderRadius: 8 }}>
-                <span className="material-symbols-outlined" style={{ color: C.error }}>warning</span>
+          {dynamicSubjects.filter(s => s.pct < 50).length > 0 && (
+            <div style={{ border: '1px solid #7C3AED', boxShadow: '0 0 15px rgba(124,58,237,0.2)', background: C.surfaceHigh, borderRadius: 12, padding: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <div style={{ padding: 8, background: 'rgba(147,0,10,0.2)', borderRadius: 8 }}>
+                  <span className="material-symbols-outlined" style={{ color: C.error }}>warning</span>
+                </div>
+                <div>
+                  <h5 style={{ fontWeight: 700, margin: '0 0 6px 0', fontSize: 14, color: C.onSurface }}>Urgent Revision Required</h5>
+                  <p style={{ fontSize: 13, color: C.onSurfaceVar, margin: 0, lineHeight: 1.5 }}>
+                    Mastery in "{dynamicSubjects.find(s => s.pct < 50)?.label}" is below 50% threshold.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h5 style={{ fontWeight: 700, margin: '0 0 6px 0', fontSize: 14, color: C.onSurface }}>Urgent Revision Required</h5>
-                <p style={{ fontSize: 13, color: C.onSurfaceVar, margin: 0, lineHeight: 1.5 }}>Electronics Exam is in 4 days. Mastery in "Transistors" is below 50% threshold.</p>
-              </div>
+              <button
+                onClick={() => navigate('/focus')}
+                style={{ marginTop: 16, width: '100%', padding: '8px', background: 'rgba(255,180,171,0.1)', color: C.error, border: `1px solid rgba(255,180,171,0.2)`, borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,180,171,0.2)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,180,171,0.1)'}
+              >Start Focus Session</button>
             </div>
-            <button
-              onClick={() => navigate('/focus')}
-              style={{ marginTop: 16, width: '100%', padding: '8px', background: 'rgba(255,180,171,0.1)', color: C.error, border: `1px solid rgba(255,180,171,0.2)`, borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,180,171,0.2)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,180,171,0.1)'}
-            >Start Focus Session</button>
-          </div>
+          )}
 
           <div style={{ background: C.surfaceContainer, padding: 24, borderRadius: 12, border: `1px solid ${C.outlineVar}`, flex: 1 }}>
             <h5 style={{ fontFamily: "'Inter'", fontWeight: 700, fontSize: 14, margin: '0 0 24px 0', display: 'flex', justifyContent: 'space-between', color: C.onSurface }}>
@@ -288,15 +315,15 @@ export default function AnalyticsDashboardPage() {
               <span style={{ color: C.primaryDim, fontSize: 12, fontWeight: 400 }}>View All</span>
             </h5>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
-              {achievements(C).map((a, i) => (
+              {achievements.map((a, i) => (
                 <div key={i} style={{ aspectRatio: '1', background: C.surfaceHigh, border: `1px solid ${C.outlineVar}`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: a.active ? 1 : 0.4 }}>
                   <span className="material-symbols-outlined" style={{ color: a.color, fontSize: 28 }}>{a.icon}</span>
                 </div>
               ))}
             </div>
-            <p style={{ fontSize: 12, fontWeight: 700, color: C.onSurface }}>Current Milestone: <span style={{ color: C.primaryDim }}>100 Topics Complete</span></p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.onSurface }}>Current Milestone: <span style={{ color: C.primaryDim }}>{totalTopics > 0 ? `${totalTopics} Topics Analyzed` : 'Analyze a Syllabus'}</span></p>
             <div style={{ marginTop: 8, height: 6, background: C.surfaceHighest, borderRadius: 999, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: '82%', background: '#7C3AED' }} />
+              <div style={{ height: '100%', width: totalTopics > 0 ? '100%' : '0%', background: '#7C3AED' }} />
             </div>
           </div>
         </div>
@@ -307,7 +334,7 @@ export default function AnalyticsDashboardPage() {
         <div style={{ background: C.surfaceContainer, padding: 32, borderRadius: 12, border: `1px solid ${C.outlineVar}` }}>
           <h4 style={{ fontFamily: "'Inter'", fontSize: 18, fontWeight: 700, marginBottom: 24, color: C.onSurface }}>Syllabus Coverage Breakdown</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {dynamicSyllabusRows.map(row => (
+            {dynamicSyllabusRows.length > 0 ? dynamicSyllabusRows.map(row => (
               <div key={row.name}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8, color: C.onSurface }}>
                   <span>{row.name}</span>
@@ -318,7 +345,7 @@ export default function AnalyticsDashboardPage() {
                   <div style={{ height: '100%', width: `${row.inProgress}%`, background: '#4f319c' }} />
                 </div>
               </div>
-            ))}
+            )) : <p style={{color: C.onSurfaceVar, fontSize: 14}}>No syllabus data available. Go to Syllabus Analyzer to upload one.</p>}
           </div>
           <div style={{ display: 'flex', gap: 24, marginTop: 16 }}>
             {[{ color: '#7C3AED', label: 'Completed' }, { color: '#4f319c', label: 'In Progress' }, { color: C.surfaceHighest, label: 'Not Started' }].map(l => (
@@ -334,7 +361,7 @@ export default function AnalyticsDashboardPage() {
           <div style={{ position: 'absolute', right: -40, bottom: -40, width: 192, height: 192, background: 'rgba(124,58,237,0.1)', borderRadius: '50%', filter: 'blur(48px)' }} />
           <h4 style={{ fontFamily: "'Inter'", fontSize: 18, fontWeight: 700, marginBottom: 24, color: C.onSurface }}>Weekly Intelligence Report</h4>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
-            {[{ label: 'Time Invested', val: '12.4h', sub: '/wk' }, { label: 'Deep Work Sessions', val: '18', sub: '' }].map(item => (
+            {[{ label: 'Time Invested', val: `${studyStats.totalHours || 0}h`, sub: '/wk' }, { label: 'Focus Sessions', val: `${studyStats.sessionsDone || 0}`, sub: '' }].map(item => (
               <div key={item.label} style={{ padding: 16, background: C.surfaceHigh, border: `1px solid ${C.outlineVar}`, borderRadius: 12 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: C.onSurfaceVar, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>{item.label}</span>
                 <p style={{ fontFamily: "'Inter'", fontSize: 24, fontWeight: 700, margin: 0, color: C.onSurface }}>{item.val}<span style={{ fontSize: 14, color: C.primaryDim }}>{item.sub}</span></p>

@@ -1,11 +1,87 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { showToast } from '../../store/slices/uiSlice';
 
 export function AiInsights() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  
+  const syllabusTopics = useSelector(state => state.study.syllabus.topics) || [];
+  
+  const insights = useMemo(() => {
+    const list = [];
+    
+    // Urgent Alert for unstarted
+    const unstarted = syllabusTopics.filter(t => t.status === 'unstarted');
+    if (unstarted.length > 0) {
+      list.push({
+        type: 'alert',
+        subject: unstarted[0].subject || unstarted[0].title,
+        title: 'Urgent Alert',
+        desc: `${unstarted[0].title} is still unstarted. Predicted score risk high.`,
+        icon: 'report',
+        bgClass: 'bg-error-container/10',
+        borderClass: 'border-error/20',
+        iconClass: 'text-error',
+        hoverClass: 'hover:bg-error-container/20',
+        path: '/syllabus',
+        msg: `⚡ Loading ${unstarted[0].subject || 'Syllabus'} breakdown...`
+      });
+    } else {
+      list.push({
+        type: 'alert',
+        subject: 'General',
+        title: 'Urgent Alert',
+        desc: `No critical pending topics found! Keep up the good work.`,
+        icon: 'report',
+        bgClass: 'bg-error-container/10',
+        borderClass: 'border-error/20',
+        iconClass: 'text-error',
+        hoverClass: 'hover:bg-error-container/20',
+        path: '/syllabus',
+        msg: `⚡ Loading syllabus breakdown...`
+      });
+    }
+
+    // Warning for needs-review
+    const weak = syllabusTopics.filter(t => t.status === 'needs-review');
+    if (weak.length > 0) {
+      list.push({
+        type: 'warning',
+        subject: weak[0].subject || weak[0].title,
+        title: 'Revision Warning',
+        desc: `You need to practice '${weak[0].title}'. Retention falling.`,
+        icon: 'warning',
+        bgClass: 'bg-orange-500/10',
+        borderClass: 'border-orange-500/20',
+        iconClass: 'text-orange-400',
+        hoverClass: 'hover:bg-orange-500/20',
+        path: '/mocktest',
+        msg: `🧠 Opening Mock Test Generator...`
+      });
+    }
+
+    // Positive for mastered
+    const mastered = syllabusTopics.filter(t => t.status === 'mastered');
+    if (mastered.length > 0) {
+      list.push({
+        type: 'positive',
+        subject: mastered[0].subject || mastered[0].title,
+        title: 'Positive Progress',
+        desc: `'${mastered[0].title}' mastery is solid. Score improved recently.`,
+        icon: 'trending_up',
+        bgClass: 'bg-green-500/10',
+        borderClass: 'border-green-500/20',
+        iconClass: 'text-green-400',
+        hoverClass: 'hover:bg-green-500/20',
+        path: '/analytics',
+        msg: `📈 Opening Analytics Dashboard...`
+      });
+    }
+
+    return list.slice(0, 3);
+  }, [syllabusTopics]);
 
   const handleAlertClick = (target, path, message) => {
     dispatch(showToast(message));
@@ -20,38 +96,19 @@ export function AiInsights() {
       </h3>
 
       <div className="space-y-3">
-        <div 
-          onClick={() => handleAlertClick('Electronics', '/syllabus', '⚡ Loading Digital Electronics syllabus breakdown...')}
-          className="bg-error-container/10 border border-error/20 p-4 rounded-2xl flex gap-3 cursor-pointer hover:bg-error-container/20 transition-all active:scale-98"
-        >
-          <span className="material-symbols-outlined text-error text-xl shrink-0">report</span>
-          <div>
-            <p className="text-[10px] font-bold text-error uppercase tracking-wider">Urgent Alert</p>
-            <p className="text-sm mt-1 text-on-surface leading-snug">Digital Electronics coverage is only 45%. Predicted score risk high.</p>
+        {insights.map((insight, i) => (
+          <div 
+            key={i}
+            onClick={() => handleAlertClick(insight.subject, insight.path, insight.msg)}
+            className={`${insight.bgClass} border ${insight.borderClass} p-4 rounded-2xl flex gap-3 cursor-pointer ${insight.hoverClass} transition-all active:scale-98`}
+          >
+            <span className={`material-symbols-outlined ${insight.iconClass} text-xl shrink-0`}>{insight.icon}</span>
+            <div>
+              <p className={`text-[10px] font-bold ${insight.iconClass} uppercase tracking-wider`}>{insight.title}</p>
+              <p className="text-sm mt-1 text-on-surface leading-snug">{insight.desc}</p>
+            </div>
           </div>
-        </div>
-
-        <div 
-          onClick={() => handleAlertClick('Graph Theory', '/revision', '🧠 Opening Smart Revision for Graph Theory...')}
-          className="bg-orange-500/6.5 p-4 rounded-2xl flex gap-3 border border-orange-500/20 cursor-pointer hover:bg-orange-500/10 transition-all active:scale-98"
-        >
-          <span className="material-symbols-outlined text-orange-400 text-xl shrink-0">warning</span>
-          <div>
-            <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider">Revision Warning</p>
-            <p className="text-sm mt-1 text-on-surface leading-snug">You haven't practiced 'Graph Theory' in 12 days. Retention falling.</p>
-          </div>
-        </div>
-
-        <div 
-          onClick={() => handleAlertClick('Data Structures', '/analytics', '📈 Opening Analytics Dashboard for Data Structures...')}
-          className="bg-green-500/10 border border-green-500/20 p-4 rounded-2xl flex gap-3 cursor-pointer hover:bg-green-500/20 transition-all active:scale-98"
-        >
-          <span className="material-symbols-outlined text-green-400 text-xl shrink-0">trending_up</span>
-          <div>
-            <p className="text-[10px] font-bold text-green-400 uppercase tracking-wider">Positive Progress</p>
-            <p className="text-sm mt-1 text-on-surface leading-snug">Data Structures score improved by 12% in recent mock tests.</p>
-          </div>
-        </div>
+        ))}
       </div>
     </section>
   );

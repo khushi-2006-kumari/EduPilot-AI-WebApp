@@ -13,7 +13,7 @@ const solveDoubt = async (req, res) => {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const modelName = deepMode ? 'gemini-1.5-pro' : 'gemini-1.5-flash';
+    const modelName = deepMode ? 'gemini-pro-latest' : 'gemini-flash-latest';
     const model = genAI.getGenerativeModel({ model: modelName });
 
     // Construct prompt with history context

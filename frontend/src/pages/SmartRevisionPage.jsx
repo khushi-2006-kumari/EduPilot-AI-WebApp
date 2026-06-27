@@ -36,29 +36,48 @@ export default function SmartRevisionPage() {
   const isLight = useIsLight();
   const C = isLight ? LIGHT : DARK;
 
-  const dueTopics = [
-    { status: 'Overdue', statusColor: C.error, code: 'CS302', title: 'Graph Algorithms', desc: "Dijkstra's & Bellman-Ford complexity analysis.", diff: 'Hard', time: '32m left' },
-    { status: 'Due Today', statusColor: C.primary, code: 'MAT201', title: 'Integration Techniques', desc: 'Partial fractions and trig substitutions.', diff: 'Medium', time: '15m left' },
-    { status: 'Due Today', statusColor: C.primary, code: 'EE102', title: 'ePWM Architecture', desc: 'Time-base submodule and counter modes.', diff: 'Hard', time: '20m left' },
-  ];
+  const syllabus = useSelector(state => state.study.syllabus);
+  const mockTests = useSelector(state => state.study.mockTests);
+  const streakCount = useSelector(state => state.study.streakCount);
 
-  const retentionRings = [
-    { label: 'Computer Science', pct: 78, color: C.primary, offset: 40 },
-    { label: 'Maths', pct: 45, color: C.secondary, offset: 100 },
-    { label: 'Electrical Eng.', pct: 66, color: isLight ? '#7a7581' : '#c9c4d9', offset: 60 },
-  ];
+  const topics = syllabus?.topics || [];
+  const total = topics.length || 85;
+  const mastered = topics.filter(t => t.status === 'mastered').length || 34;
+  const weak = topics.filter(t => t.status === 'needs-review').length || 18;
+  const revised = topics.filter(t => t.status === 'in-progress' || t.status === 'mastered').length || 52;
 
-  const weakAreas = [
-    { label: 'Recursion Depth', pct: 45, color: C.error },
-    { label: 'Logic Gates', pct: 58, color: C.secondary },
-    { label: 'Vector Spaces', pct: 62, color: C.primary },
-  ];
+  const dueTopics = topics.filter(t => t.status === 'needs-review').map(t => ({
+    status: 'Overdue',
+    statusColor: C.error,
+    code: t.subject.substring(0, 6).toUpperCase(),
+    title: t.title,
+    desc: `Complexity: ${t.complexity}, Weight: ${t.weight}`,
+    diff: t.complexity,
+    time: 'Due Now'
+  }));
 
-  const recentActivity = [
-    { icon: 'check', iconColor: '#4ade80', iconBg: 'rgba(74,222,128,0.2)', title: 'Integration Basics', score: '10/10', type: 'Quiz • 15 mins', time: '2 hours ago' },
-    { icon: 'rotate_left', iconColor: C.secondary, iconBg: 'rgba(206,189,255,0.2)', title: 'Sorting Algorithms', score: '7/10', type: 'Flashcards • 30 mins', time: 'Yesterday, 4:20 PM' },
-    { icon: 'priority_high', iconColor: C.error, iconBg: isLight ? 'rgba(186,26,26,0.15)' : 'rgba(255,180,171,0.2)', title: 'Logic Design', score: '5/10', type: 'Write & Test • 45 mins', time: 'Oct 24, 11:05 AM', scoreColor: C.error },
-  ];
+  const weakAreas = topics.filter(t => t.status === 'needs-review').slice(0, 3).map(t => ({
+    label: t.title.substring(0, 15) + (t.title.length > 15 ? '...' : ''),
+    pct: 45,
+    color: C.error
+  }));
+
+  if (weakAreas.length === 0 && topics.length > 0) {
+    weakAreas.push({ label: topics[0].title.substring(0, 15) + '...', pct: 85, color: '#4ade80' });
+  }
+
+  const recentActivity = mockTests?.pastResults?.slice(0, 3).map(r => ({
+    icon: r.score >= 80 ? 'check' : r.score < 60 ? 'priority_high' : 'rotate_left',
+    iconColor: r.score >= 80 ? '#4ade80' : r.score < 60 ? C.error : C.secondary,
+    iconBg: r.score >= 80 ? 'rgba(74,222,128,0.2)' : r.score < 60 ? 'rgba(255,180,171,0.2)' : 'rgba(206,189,255,0.2)',
+    title: r.title,
+    score: `${r.correctAnswers}/${r.totalQuestions}`,
+    type: `Mock Test • ${r.subject}`,
+    time: r.date,
+    scoreColor: r.score < 60 ? C.error : undefined
+  })) || [];
+
+
 
   const cardStyle = { background: C.cardBg, backdropFilter: 'blur(12px)', border: `1px solid ${C.outlineVar}`, borderRadius: 12, padding: 24 };
 
@@ -96,7 +115,7 @@ export default function SmartRevisionPage() {
               <span className="material-symbols-outlined" style={{ color: C.primary }}>schedule</span>
               Due for Revision
             </h3>
-            <span style={{ background: 'rgba(255,180,171,0.1)', color: C.error, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, border: `1px solid ${C.error}33` }}>12 OVERDUE</span>
+            <span style={{ background: 'rgba(255,180,171,0.1)', color: C.error, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, border: `1px solid ${C.error}33` }}>{dueTopics.length} OVERDUE</span>
           </div>
           <div style={{ display: 'flex', gap: 16, borderBottom: `1px solid ${C.outlineVar}`, marginBottom: 16 }}>
             {['All', 'Overdue', 'Today', 'Upcoming'].map((t) => (
@@ -140,7 +159,7 @@ export default function SmartRevisionPage() {
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 32 }}>
-              {[{val:'85',label:'Total',color:C.onSurface},{val:'52',label:'Revised',color:C.primary},{val:'18',label:'Weak',color:C.error},{val:'34',label:'Mastered',color:'#4ade80'}].map(s => (
+              {[{val:total,label:'Total',color:C.onSurface},{val:revised,label:'Revised',color:C.primary},{val:weak,label:'Weak',color:C.error},{val:mastered,label:'Mastered',color:'#4ade80'}].map(s => (
                 <div key={s.label} style={{ textAlign: 'center', padding: 12, background: C.surfaceContainer, borderRadius: 8, border: `1px solid ${C.outlineVar}` }}>
                   <div style={{ fontFamily: "'Inter'", fontSize: 24, fontWeight: 700, color: s.color }}>{s.val}</div>
                   <div style={{ fontSize: 10, color: C.onSurfaceVar, textTransform: 'uppercase', fontWeight: 700 }}>{s.label}</div>
@@ -174,8 +193,8 @@ export default function SmartRevisionPage() {
                   <span className="material-symbols-outlined" style={{ fontSize: 28 }}>local_fire_department</span>
                 </div>
                 <div>
-                  <div style={{ fontFamily: "'Inter'", fontSize: 20, fontWeight: 700, color: C.onSurface }}>7 Days Streak</div>
-                  <div style={{ fontSize: 12, color: C.onSurfaceVar }}>Consistency Score: <span style={{ color: '#4ade80', fontWeight: 700 }}>92%</span></div>
+                  <div style={{ fontFamily: "'Inter'", fontSize: 20, fontWeight: 700, color: C.onSurface }}>{streakCount} Days Streak</div>
+                  <div style={{ fontSize: 12, color: C.onSurfaceVar }}>Consistency Score: <span style={{ color: '#4ade80', fontWeight: 700 }}>{Math.min(100, streakCount * 12 + 20)}%</span></div>
                 </div>
               </div>
               <span className="material-symbols-outlined" style={{ color: C.onSurfaceVar, opacity: 0.4 }}>trending_up</span>
@@ -185,7 +204,11 @@ export default function SmartRevisionPage() {
           <div style={cardStyle}>
             <h4 style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: C.onSurfaceVar, letterSpacing: '0.08em', marginBottom: 16 }}>Subject Retention Rings</h4>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
-              {retentionRings.map((ring, i) => (
+              {[
+                { label: 'Overall', pct: Math.round((mastered/total)*100) || 78, color: C.primary, offset: 40 },
+                { label: 'Recent', pct: Math.round((revised/total)*100) || 45, color: C.secondary, offset: 100 },
+                { label: 'Pending', pct: Math.round((weak/total)*100) || 66, color: isLight ? '#7a7581' : '#c9c4d9', offset: 60 },
+              ].map((ring, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <div style={{ position: 'relative', width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="64" height="64" style={{ transform: 'rotate(-90deg)' }}>
@@ -212,7 +235,7 @@ export default function SmartRevisionPage() {
               <div style={{ position: 'absolute', width: 128, height: 128, border: `12px solid ${C.surfaceHighest}`, borderRadius: '50%', top: 0, left: 0 }} />
               <div style={{ position: 'absolute', width: 128, height: 128, border: '12px solid #7C3AED', borderTop: '12px solid transparent', borderRight: '12px solid transparent', borderRadius: '50%', top: 0, left: 0, transform: 'rotate(45deg)' }} />
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
-                <span style={{ fontFamily: "'Inter'", fontSize: 24, fontWeight: 700, color: C.onSurface }}>68%</span>
+                <span style={{ fontFamily: "'Inter'", fontSize: 24, fontWeight: 700, color: C.onSurface }}>{Math.round((mastered/total)*100) || 68}%</span>
                 <span style={{ fontSize: 8, fontWeight: 700, textTransform: 'uppercase', color: C.onSurfaceVar }}>LTM Score</span>
               </div>
             </div>

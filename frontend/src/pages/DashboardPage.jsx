@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { toggleTask, setFocusType, setIsFocusActive, addChatMessage, showToast } from '../store';
 import { TodaysPlan } from '../components/dashboard/TodaysPlan';
 import { DoubtSolver } from '../features/doubt-solver/DoubtSolver';
@@ -78,7 +79,7 @@ export default function DashboardPage() {
     dispatch(setIsFocusActive(val));
   };
 
-  const handleSendDoubt = (e, presetText = null) => {
+  const handleSendDoubt = async (e, presetText = null) => {
     if (e) e.preventDefault();
     const query = presetText || userInput;
     if (!query.trim()) return;
@@ -92,23 +93,39 @@ export default function DashboardPage() {
     if (!presetText) setUserInput('');
     setIsAiTyping(true);
 
-    setTimeout(() => {
-      let replyText = '';
-      if (query.toLowerCase().includes('worst case') || query.toLowerCase().includes('scenario')) {
-        replyText = "In QuickSort, the worst-case time complexity is O(n^2). This happens when partitions split extremely unevenly (e.g. array is already sorted).";
-      } else if (query.toLowerCase().includes('merge') || query.toLowerCase().includes('comparison')) {
-        replyText = "MergeSort runs consistently in O(n log n) but demands O(n) temporary space. QuickSort is typically faster in practice due to hardware cache locality.";
-      } else {
-        replyText = `Socratic reply: Understood. Regarding "${query}", how would Lomuto partitioning split convergence compare to Hoare's partitioning scheme?`;
-      }
+    try {
+      // Prepare history for context
+      const history = chatMessages.map(msg => ({
+        role: msg.sender,
+        text: msg.text
+      }));
+
+      const config = {
+        headers: { Authorization: `Bearer ${user.token}` }
+      };
+
+      const { data } = await axios.post('http://localhost:5000/api/chat', {
+        question: query,
+        history,
+        deepMode: false
+      }, config);
 
       dispatch(addChatMessage({
         id: Date.now() + 1,
         sender: 'ai',
-        text: replyText
+        text: data.answer
       }));
+    } catch (error) {
+      console.error('Chat error:', error);
+      dispatch(addChatMessage({
+        id: Date.now() + 1,
+        sender: 'ai',
+        text: "Sorry, I encountered an error. Please try again."
+      }));
+      triggerToast('AI Service Error');
+    } finally {
       setIsAiTyping(false);
-    }, 1200);
+    }
   };
 
   return (
