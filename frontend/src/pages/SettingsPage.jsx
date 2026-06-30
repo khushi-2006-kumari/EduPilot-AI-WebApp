@@ -171,7 +171,7 @@ export default function SettingsPage() {
         await axios.delete('http://localhost:5000/api/auth/me', config);
         dispatch(logout());
         dispatch(showToast("Account deleted successfully."));
-        navigate('/login');
+        navigate('/');
       } catch (error) {
         dispatch(showToast(error.response?.data?.error || "Failed to delete account."));
       }

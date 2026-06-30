@@ -37,7 +37,7 @@ export default function AppLayout() {
 
   // Redirect if not authenticated
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   // Redirect to onboarding if not yet completed
