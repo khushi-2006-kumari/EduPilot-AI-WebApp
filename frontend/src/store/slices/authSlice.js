@@ -18,6 +18,9 @@ const authSlice = createSlice({  //authSlice which holding all entire slicce obj
     loginSuccess: (state, action) => { //'loginSuccess is a reducer name
       state.user = action.payload;
       localStorage.setItem('edupilot_user', JSON.stringify(action.payload));
+      if (action.payload?.token) {
+        localStorage.setItem('token', action.payload.token);
+      }
     },
     //loginSuccess: 1. saves user to redux state, so the whole app knows someone is logged in
     //2. saves user to localStorage, so user stays logged in even after page refresh
@@ -26,6 +29,7 @@ const authSlice = createSlice({  //authSlice which holding all entire slicce obj
     logout: (state) => {
       state.user = null;
       localStorage.removeItem('edupilot_user');
+      localStorage.removeItem('token');
     },
     //logout: 1. clears user from redux state, so the whole app knows user is logged out
     //2. removes user from localStorage, so user stays logged out even after page refresh

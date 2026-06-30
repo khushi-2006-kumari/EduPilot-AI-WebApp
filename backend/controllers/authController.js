@@ -95,8 +95,49 @@ const getMe = async (req, res) => {
   res.status(200).json(req.user);
 };
 
+// @desc    Update user password
+// @route   PUT /api/auth/password
+// @access  Private
+const updatePassword = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (user) {
+      if (!req.body.newPassword) {
+         return res.status(400).json({ error: 'Please provide a new password' });
+      }
+      user.password = req.body.newPassword;
+      await user.save();
+      res.json({ message: 'Password updated successfully' });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// @desc    Delete user account
+// @route   DELETE /api/auth/me
+// @access  Private
+const deleteAccount = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (user) {
+      await user.deleteOne();
+      res.json({ message: 'Account deleted successfully' });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
   getMe,
+  updatePassword,
+  deleteAccount,
 };

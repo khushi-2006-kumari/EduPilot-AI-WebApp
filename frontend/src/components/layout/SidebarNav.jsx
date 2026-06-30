@@ -17,7 +17,6 @@ const navItems = [
 
 const bottomNavItems = [
   { icon: "settings", label: "Settings", path: "/settings" },
-  { icon: "help", label: "Support", path: "/support" },
 ];
 
 export function SidebarNav({ user }) {

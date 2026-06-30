@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { updateUser, setTheme, showToast } from '../store';
+import { updateUser, setTheme, showToast, logout } from '../store';
 import { useIsLight } from '../hooks/useIsLight';
+import axios from 'axios';
 
 // Accent palette: each entry has display color and the CSS variables to override
 const ACCENT_PALETTES = [
@@ -68,6 +69,13 @@ const ACCENT_PALETTES = [
   },
 ];
 
+const TABS = [
+  { id: 'profile', label: 'My Profile', icon: 'person' },
+  { id: 'study', label: 'Study Preferences', icon: 'school' },
+  { id: 'appearance', label: 'Appearance', icon: 'palette' },
+  { id: 'security', label: 'Security', icon: 'shield' },
+];
+
 export default function SettingsPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -75,15 +83,19 @@ export default function SettingsPage() {
   // Selectors from Redux
   const user = useSelector(state => state.auth.user);
   const theme = useSelector(state => state.ui.theme);
-  const streakCount = useSelector(state => state.study.streakCount) || 14;
+  const streakCount = useSelector(state => state.study.streakCount) || 0;
   const completedTaskCount = useSelector(state => state.study.tasks.filter(t => t.completed).length) || 0;
-  const mockTestsCount = useSelector(state => state.study.mockTests.pastResults.length) || 3;
+  const mockTestsCount = useSelector(state => state.study.mockTests.pastResults?.length || 0);
+
+  // Tab State
+  const [activeTab, setActiveTab] = useState('profile');
 
   // Local States for form inputs
-  const [name, setName] = useState(user?.name || 'Alex Rivera');
-  const [email, setEmail] = useState(user?.email || 'alex.rivera@university.edu');
-  const [university, setUniversity] = useState(user?.university || 'Stanford University');
-  const [yearSemester, setYearSemester] = useState(user?.yearSemester || 'Year 3 / Sem 5');
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [university, setUniversity] = useState(user?.university || '');
+  const [branch, setBranch] = useState(user?.branch || '');
+  const [year, setYear] = useState(user?.year || 'Freshman');
   const [studyHours, setStudyHours] = useState(user?.studyHours || 6);
   const [focusSession, setFocusSession] = useState(user?.focusSession || 'Morning');
   const [pomodoroEnabled, setPomodoroEnabled] = useState(true);
@@ -96,14 +108,17 @@ export default function SettingsPage() {
 
   // Other visual settings
   const [accentColor, setAccentColor] = useState('purple');
-  const [twoFactor, setTwoFactor] = useState(false);
 
   // Avatar
   const [avatarSrc, setAvatarSrc] = useState(user?.avatar || null);
   const photoInputRef = useRef(null);
 
-  // 2FA confirm modal state
-  const [show2faModal, setShow2faModal] = useState(false);
+  // Password reset modal state
+
+  // Password reset modal state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const isLight = useIsLight();
 
@@ -114,7 +129,8 @@ export default function SettingsPage() {
       name,
       email,
       university,
-      yearSemester,
+      branch,
+      year,
       studyHours,
       focusSession
     }));
@@ -122,15 +138,44 @@ export default function SettingsPage() {
   };
 
   const handlePasswordReset = () => {
-    dispatch(showToast("🔒 Password reset link sent to your registered email."));
+    setShowPasswordModal(true);
   };
 
-  const handleDeleteAccount = () => {
-    dispatch(showToast("⚠️ Account deletion request logged. Contact admin to finalize."));
+  const handlePasswordSave = async () => {
+    if (!newPassword || newPassword !== confirmPassword) {
+      dispatch(showToast("⚠️ Passwords do not match or are empty."));
+      return;
+    }
+    
+    try {
+      if (!user || !user.token) {
+        dispatch(showToast("⚠️ Not authenticated."));
+        return;
+      }
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      await axios.put('http://localhost:5000/api/auth/password', { newPassword }, config);
+      dispatch(showToast("✅ Password updated successfully!"));
+      setShowPasswordModal(false);
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      const msg = error.response?.data?.error || "⚠️ Failed to update password.";
+      dispatch(showToast(msg));
+    }
   };
 
-  const handleFeedback = () => {
-    dispatch(showToast("❤️ Thank you for your feedback!"));
+  const handleDeleteAccount = async () => {
+    if (window.confirm("Are you absolutely sure you want to delete your account? This action cannot be undone.")) {
+      try {
+        const config = { headers: { Authorization: `Bearer ${user.token}` } };
+        await axios.delete('http://localhost:5000/api/auth/me', config);
+        dispatch(logout());
+        dispatch(showToast("Account deleted successfully."));
+        navigate('/login');
+      } catch (error) {
+        dispatch(showToast(error.response?.data?.error || "Failed to delete account."));
+      }
+    }
   };
 
   // Apply accent palette: set CSS custom properties on <html>
@@ -165,29 +210,33 @@ export default function SettingsPage() {
       dispatch(showToast('✅ Profile photo updated successfully!'));
     };
     reader.readAsDataURL(file);
-    // reset input so same file can be re-selected
     e.target.value = '';
   };
 
-  const handle2faToggle = () => {
-    if (!twoFactor) {
-      // enabling → show confirmation modal
-      setShow2faModal(true);
-    } else {
-      setTwoFactor(false);
-      dispatch(showToast('🔓 Two-Factor Authentication disabled.'));
-    }
-  };
-
-  const confirm2faEnable = () => {
-    setTwoFactor(true);
-    setShow2faModal(false);
-    dispatch(showToast('🔐 Two-Factor Authentication enabled!'));
-  };
+  // Reusable toggle switch component for cleaner code
+  const ToggleSwitch = ({ checked, onChange }) => (
+    <button
+      type="button"
+      onClick={onChange}
+      aria-pressed={checked}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors duration-200 focus:outline-none ${
+        checked
+          ? 'bg-primary-container border-primary/40'
+          : 'bg-surface-container-highest border-outline-variant'
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full shadow-md transition-transform duration-200 ${
+          checked
+            ? 'translate-x-5 bg-on-primary-container'
+            : 'translate-x-0.5 bg-on-surface-variant'
+        }`}
+      />
+    </button>
+  );
 
   return (<>
     <div className="space-y-8 animate-fade-in-up">
-      {/* Scope component specific styles */}
       <style>{`
         .glass-card-settings {
           background: ${isLight ? 'rgba(255, 255, 255, 0.7)' : 'rgba(34, 30, 40, 0.8)'};
@@ -211,6 +260,13 @@ export default function SettingsPage() {
           cursor: pointer;
           box-shadow: 0 0 10px rgba(210, 187, 255, 0.5);
         }
+        .tab-content-enter {
+          animation: tabFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        @keyframes tabFadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
 
       {/* Header section */}
@@ -227,460 +283,356 @@ export default function SettingsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 max-w-[1440px] mx-auto">
         
-        {/* Left Column: Profile Card */}
-        <div className="col-span-12 lg:col-span-4 space-y-6">
-          <div className="glass-card-settings violet-glow-settings rounded-2xl p-8 flex flex-col items-center text-center">
-            <div className="relative group">
-              <div className="w-32 h-32 rounded-full border-4 border-primary/20 violet-border-glow-settings overflow-hidden mb-6">
-                {avatarSrc ? (
-                  <img
-                    alt="Avatar"
-                    className="w-full h-full object-cover"
-                    src={avatarSrc}
-                  />
-                ) : (
-                  <img
-                    alt="Avatar"
-                    className="w-full h-full object-cover"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCOosZ7-vOiCSdZcOwKrrNVaItlJhuXAhIQsmTCMN-m3tbLooReV_2oYpTGj5ciMLD6s7l6AvJQ8mzyLyQ5ElZTz9kRkzaMg867M3tGjyqEmcOzYSZOUMk610oubchCtyYbb-ZNML9mixbZlTmadjJVVHW-36ZIEaTmvSWNLJYj23fzO74y7b55QInAIkydAOp8NYGpFXNsffBjYRjJKR7Leu_lWhVLKQL-wN_ud6HIjMcEfHSdyZLwVZWrDGo1jHaJD6--fuqw8hwc"
-                  />
-                )}
-              </div>
-              <button 
-                onClick={handlePhotoUpload}
-                className="absolute bottom-6 right-2 bg-primary text-on-primary p-2 rounded-full hover:scale-110 transition-transform shadow-lg border-2 border-[#12102A] cursor-pointer flex items-center justify-center"
+        {/* Left Column: Navigation Sidebar */}
+        <div className="col-span-12 lg:col-span-3 space-y-4">
+          <div className="glass-card-settings rounded-2xl p-4 flex flex-col gap-2">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-3 w-full p-3.5 rounded-xl transition-all cursor-pointer font-semibold text-left ${
+                  activeTab === tab.id 
+                    ? 'bg-primary/10 text-primary border-l-4 border-primary' 
+                    : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface border-l-4 border-transparent'
+                }`}
               >
-                <span className="material-symbols-outlined text-sm">photo_camera</span>
+                <span className="material-symbols-outlined">{tab.icon}</span>
+                {tab.label}
               </button>
-            </div>
-            
-            <h2 className="font-headline text-2xl font-bold mb-1 text-on-surface">{name}</h2>
-            <p className="text-on-surface-variant text-sm mb-4">{email}</p>
-            <span className="px-4 py-1.5 rounded-full bg-secondary-container/30 text-on-secondary-container border border-secondary/20 text-xs font-bold tracking-wide mb-8">
-              B.TECH STUDENT
-            </span>
-            
-            <div className="grid grid-cols-3 gap-3 w-full mb-8">
-              <div className="bg-surface-container-low/50 p-3 rounded-xl border border-outline-variant/30">
-                <span className="block text-primary font-bold text-lg leading-tight">{streakCount}</span>
-                <span className="text-[10px] text-on-surface-variant uppercase font-bold">Streak 🔥</span>
-              </div>
-              <div className="bg-surface-container-low/50 p-3 rounded-xl border border-outline-variant/30">
-                <span className="block text-primary font-bold text-lg leading-tight">{completedTaskCount + 39}</span>
-                <span className="text-[10px] text-on-surface-variant uppercase font-bold">Topics</span>
-              </div>
-              <div className="bg-surface-container-low/50 p-3 rounded-xl border border-outline-variant/30">
-                <span className="block text-primary font-bold text-lg leading-tight">{mockTestsCount + 9}</span>
-                <span className="text-[10px] text-on-surface-variant uppercase font-bold">Mock Tests</span>
-              </div>
-            </div>
-            
-            <button 
-              onClick={handleSave}
-              className="w-full py-3 bg-primary-container text-on-primary-container rounded-xl font-bold hover:brightness-110 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-sm">edit</span>
-              Save Preferences
-            </button>
+            ))}
           </div>
 
-          {/* Quick Access Badge */}
           <div className="glass-card-settings rounded-xl p-4 flex items-center gap-4 border-l-4 border-l-primary">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
               <span className="material-symbols-outlined">auto_awesome</span>
             </div>
             <div className="flex-1">
               <p className="text-xs font-bold text-primary mb-0.5">AI STATUS</p>
-              <p className="text-sm text-on-surface">Predicting Exam Performance...</p>
+              <p className="text-sm text-on-surface">Predicting Performance...</p>
             </div>
             <span className="text-xs text-on-surface-variant font-medium">85%</span>
           </div>
         </div>
 
-        {/* Right Column: Settings Panels */}
-        <div className="col-span-12 lg:col-span-8 space-y-6">
+        {/* Right Column: Tab Content Panels */}
+        <div className="col-span-12 lg:col-span-9 relative min-h-[500px]">
           
-          {/* Section 1: Account Settings */}
-          <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-8">
-            <div className="flex items-center gap-2 mb-6">
-              <span className="material-symbols-outlined text-primary">person</span>
-              <h3 className="font-headline text-xl font-semibold text-on-surface">Account Settings</h3>
-            </div>
-            
-            <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-on-surface-variant uppercase px-1">Full Name</label>
-                <input 
-                  className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none" 
-                  type="text" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-on-surface-variant uppercase px-1">Email Address</label>
-                <input 
-                  className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none" 
-                  type="email" 
-                  value={email} 
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-on-surface-variant uppercase px-1">Institution</label>
-                <input 
-                  className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none" 
-                  type="text" 
-                  value={university} 
-                  onChange={(e) => setUniversity(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-on-surface-variant uppercase px-1">Year / Semester</label>
-                <select 
-                  className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none"
-                  value={yearSemester}
-                  onChange={(e) => setYearSemester(e.target.value)}
-                >
-                  <option value="Year 3 / Sem 5">Year 3 / Sem 5</option>
-                  <option value="Year 3 / Sem 6">Year 3 / Sem 6</option>
-                  <option value="Year 4 / Sem 7">Year 4 / Sem 7</option>
-                </select>
-              </div>
-              
-              <div className="col-span-1 md:col-span-2 pt-2 flex justify-end">
-                <button 
-                  type="submit" 
-                  className="bg-primary-container text-on-primary-container py-2.5 px-6 rounded-xl font-bold hover:brightness-110 active:scale-95 transition-all text-sm cursor-pointer flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-sm">save</span>
-                  Save Account Changes
-                </button>
-              </div>
-            </form>
-          </section>
-
-          {/* Section 2: Study Preferences */}
-          <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-8">
-            <div className="flex items-center gap-2 mb-6">
-              <span className="material-symbols-outlined text-primary">school</span>
-              <h3 className="font-headline text-xl font-semibold text-on-surface">Study Preferences</h3>
-            </div>
-            
-            <div className="space-y-8">
-              <div>
-                <div className="flex justify-between mb-4">
-                  <label className="text-xs font-bold text-on-surface-variant uppercase">Study Hours per Day</label>
-                  <span className="text-primary font-bold">{studyHours} Hours</span>
+          {/* PROFILE TAB */}
+          {activeTab === 'profile' && (
+            <div className="tab-content-enter space-y-6">
+              {/* Top Row: Avatar & Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <div className="md:col-span-5 glass-card-settings violet-glow-settings rounded-2xl p-8 flex flex-col items-center text-center">
+                  <div className="relative group">
+                    <div className="w-32 h-32 rounded-full border-4 border-primary/20 violet-border-glow-settings overflow-hidden mb-6">
+                      {avatarSrc ? (
+                        <img alt="Avatar" className="w-full h-full object-cover" src={avatarSrc} />
+                      ) : (
+                        <img alt="Avatar" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCOosZ7-vOiCSdZcOwKrrNVaItlJhuXAhIQsmTCMN-m3tbLooReV_2oYpTGj5ciMLD6s7l6AvJQ8mzyLyQ5ElZTz9kRkzaMg867M3tGjyqEmcOzYSZOUMk610oubchCtyYbb-ZNML9mixbZlTmadjJVVHW-36ZIEaTmvSWNLJYj23fzO74y7b55QInAIkydAOp8NYGpFXNsffBjYRjJKR7Leu_lWhVLKQL-wN_ud6HIjMcEfHSdyZLwVZWrDGo1jHaJD6--fuqw8hwc" />
+                      )}
+                    </div>
+                    <button 
+                      onClick={handlePhotoUpload}
+                      className="absolute bottom-6 right-2 bg-primary text-on-primary p-2 rounded-full hover:scale-110 transition-transform shadow-lg border-2 border-[#12102A] cursor-pointer flex items-center justify-center"
+                    >
+                      <span className="material-symbols-outlined text-sm">photo_camera</span>
+                    </button>
+                  </div>
+                  <h2 className="font-headline text-2xl font-bold mb-1 text-on-surface">{name || 'User'}</h2>
+                  <p className="text-on-surface-variant text-sm mb-4">{email || 'email@example.com'}</p>
+                  <span className="px-4 py-1.5 rounded-full bg-secondary-container/30 text-on-secondary-container border border-secondary/20 text-xs font-bold tracking-wide mb-6">
+                    {branch ? branch.toUpperCase() : 'STUDENT'}
+                  </span>
                 </div>
-                <input 
-                  className="w-full h-1.5 bg-surface-container-highest rounded-full appearance-none custom-slider cursor-pointer accent-primary" 
-                  max="12" 
-                  min="1" 
-                  type="range" 
-                  value={studyHours}
-                  onChange={(e) => setStudyHours(Number(e.target.value))}
-                />
-              </div>
-              
-              <div className="flex flex-wrap items-center justify-between gap-6">
-                <div className="space-y-3">
-                  <label className="text-xs font-bold text-on-surface-variant uppercase block">Focus Sessions</label>
-                  <div className="flex gap-2">
-                    {['Morning', 'Afternoon', 'Night'].map((session) => (
-                      <button 
-                        key={session}
-                        onClick={() => setFocusSession(session)}
-                        className={`px-4 py-2 rounded-full text-sm font-bold border transition-all cursor-pointer ${
-                          focusSession === session 
-                            ? 'bg-secondary-container text-on-secondary-container border-primary/30' 
-                            : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-variant'
-                        }`}
-                      >
-                        {session}
-                      </button>
-                    ))}
+
+                <div className="md:col-span-7 glass-card-settings rounded-2xl p-8 flex flex-col justify-center">
+                  <h3 className="text-lg font-bold text-on-surface mb-6 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary">monitoring</span> Academic Stats
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-surface-container-low/50 p-4 rounded-xl border border-outline-variant/30 text-center">
+                      <span className="block text-primary font-bold text-3xl mb-1">{streakCount}</span>
+                      <span className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider">Streak 🔥</span>
+                    </div>
+                    <div className="bg-surface-container-low/50 p-4 rounded-xl border border-outline-variant/30 text-center">
+                      <span className="block text-primary font-bold text-3xl mb-1">{completedTaskCount}</span>
+                      <span className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider">Topics</span>
+                    </div>
+                    <div className="bg-surface-container-low/50 p-4 rounded-xl border border-outline-variant/30 text-center">
+                      <span className="block text-primary font-bold text-3xl mb-1">{mockTestsCount}</span>
+                      <span className="text-[10px] text-on-surface-variant uppercase font-bold tracking-wider">Mock Tests</span>
+                    </div>
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-4 mt-4 md:mt-0">
-                  <span className="text-sm font-bold text-on-surface">Pomodoro Timer</span>
-                  <label className="relative inline-flex items-center cursor-pointer select-none">
-                    <input 
-                      type="checkbox" 
-                      checked={pomodoroEnabled}
-                      onChange={() => setPomodoroEnabled(!pomodoroEnabled)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
-                  </label>
-                </div>
               </div>
-            </div>
-          </section>
 
-          {/* Section 3: Notifications & Appearance */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Notifications panel */}
-            <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <span className="material-symbols-outlined text-primary">notifications_active</span>
-                <h3 className="font-headline text-lg font-semibold text-on-surface">Notifications</h3>
-              </div>
-              <ul className="space-y-4">
-                <li className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-on-surface">Daily reminders</span>
-                  <input 
-                    type="checkbox" 
-                    checked={notifyDaily}
-                    onChange={() => setNotifyDaily(!notifyDaily)}
-                    className="w-4.5 h-4.5 text-primary bg-surface-container-lowest border-outline-variant rounded focus:ring-primary cursor-pointer" 
-                  />
-                </li>
-                <li className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-on-surface">Mock test alerts</span>
-                  <input 
-                    type="checkbox" 
-                    checked={notifyMockTest}
-                    onChange={() => setNotifyMockTest(!notifyMockTest)}
-                    className="w-4.5 h-4.5 text-primary bg-surface-container-lowest border-outline-variant rounded focus:ring-primary cursor-pointer" 
-                  />
-                </li>
-                <li className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-on-surface">AI suggestions</span>
-                  <input 
-                    type="checkbox" 
-                    checked={notifyAi}
-                    onChange={() => setNotifyAi(!notifyAi)}
-                    className="w-4.5 h-4.5 text-primary bg-surface-container-lowest border-outline-variant rounded focus:ring-primary cursor-pointer" 
-                  />
-                </li>
-                <li className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-on-surface">Streak alerts</span>
-                  <input 
-                    type="checkbox" 
-                    checked={notifyStreak}
-                    onChange={() => setNotifyStreak(!notifyStreak)}
-                    className="w-4.5 h-4.5 text-primary bg-surface-container-lowest border-outline-variant rounded focus:ring-primary cursor-pointer" 
-                  />
-                </li>
-              </ul>
-            </section>
-
-            {/* Appearance panel */}
-            <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <span className="material-symbols-outlined text-primary">palette</span>
-                <h3 className="font-headline text-lg font-semibold text-on-surface">Appearance</h3>
-              </div>
-              <div className="space-y-6">
-                <div className="bg-surface-container-lowest p-1 rounded-lg flex border border-outline-variant">
-                  <button 
-                    onClick={() => {
-                      dispatch(setTheme('light'));
-                      dispatch(showToast("Theme switched to LIGHT"));
-                    }}
-                    className={`flex-1 py-2 text-xs font-bold transition-all cursor-pointer rounded-md ${
-                      theme === 'light' 
-                        ? 'bg-surface-variant text-on-surface shadow-sm' 
-                        : 'text-on-surface-variant hover:text-on-surface'
-                    }`}
-                  >
-                    Light
-                  </button>
-                  <button 
-                    onClick={() => {
-                      dispatch(setTheme('dark'));
-                      dispatch(showToast("Theme switched to DARK"));
-                    }}
-                    className={`flex-1 py-2 text-xs font-bold transition-all cursor-pointer rounded-md ${
-                      theme === 'dark' 
-                        ? 'bg-surface-variant text-on-surface shadow-sm' 
-                        : 'text-on-surface-variant hover:text-on-surface'
-                    }`}
-                  >
-                    Dark
-                  </button>
-                  <button 
-                    onClick={() => {
-                      dispatch(setTheme('auto'));
-                      dispatch(showToast("Theme switched to AUTO (System)"));
-                    }}
-                    className={`flex-1 py-2 text-xs font-bold transition-all cursor-pointer rounded-md ${
-                      theme === 'auto' 
-                        ? 'bg-surface-variant text-on-surface shadow-sm' 
-                        : 'text-on-surface-variant hover:text-on-surface'
-                    }`}
-                  >
-                    Auto
-                  </button>
+              {/* Bottom Row: Edit Details */}
+              <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-8">
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="material-symbols-outlined text-primary">person</span>
+                  <h3 className="font-headline text-xl font-semibold text-on-surface">Edit Profile Details</h3>
                 </div>
                 
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {ACCENT_PALETTES.map((palette) => (
-                      <button
-                        key={palette.id}
-                        title={palette.label}
-                        onClick={() => handleAccentChange(palette)}
-                        style={{ backgroundColor: palette.swatch }}
-                        className={`w-7 h-7 rounded-full cursor-pointer transition-all border-2 border-transparent hover:scale-110 ${
-                          accentColor === palette.id
-                            ? `ring-2 ring-offset-2 scale-110 ${isLight ? 'ring-gray-700 ring-offset-[#eae6ef]' : 'ring-white ring-offset-[#1d1a24]'}`
-                            : 'opacity-70 hover:opacity-100'
-                        }`}
-                      />
-                    ))}
+                <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-on-surface-variant uppercase px-1">Full Name</label>
+                    <input className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none" type="text" value={name} onChange={(e) => setName(e.target.value)} required />
                   </div>
-                  <p className="text-xs text-on-surface-variant">
-                    Selected: <span className="font-bold text-primary">{ACCENT_PALETTES.find(p => p.id === accentColor)?.label}</span>
-                  </p>
-                </div>
-              </div>
-            </section>
-          </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-on-surface-variant uppercase px-1">Email Address</label>
+                    <input className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-on-surface-variant uppercase px-1">Institution</label>
+                    <input className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none" type="text" value={university} onChange={(e) => setUniversity(e.target.value)} required />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-on-surface-variant uppercase px-1">Branch</label>
+                    <select className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none cursor-pointer" value={branch} onChange={(e) => setBranch(e.target.value)}>
+                      <option value="Computer Science">Computer Science</option>
+                      <option value="Biological Sciences">Biological Sciences</option>
+                      <option value="Engineering">Engineering</option>
+                      <option value="Business & Economics">Business & Economics</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-xs font-bold text-on-surface-variant uppercase px-1">Year</label>
+                    <select className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none cursor-pointer" value={year} onChange={(e) => setYear(e.target.value)}>
+                      <option value="Freshman">Freshman</option>
+                      <option value="Sophomore">Sophomore</option>
+                      <option value="Junior">Junior</option>
+                      <option value="Senior">Senior</option>
+                      <option value="Postgrad">Postgrad</option>
+                    </select>
+                  </div>
+                  <div className="col-span-1 md:col-span-2 pt-4 flex justify-end">
+                    <button type="submit" className="bg-primary-container text-on-primary-container py-3 px-8 rounded-xl font-bold hover:brightness-110 active:scale-95 transition-all text-sm cursor-pointer flex items-center gap-2">
+                      <span className="material-symbols-outlined text-sm">save</span> Save Changes
+                    </button>
+                  </div>
+                </form>
+              </section>
+            </div>
+          )}
 
-          {/* Section 4: Privacy & Security + About & Help */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
-            
-            {/* Privacy & Security */}
-            <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <span className="material-symbols-outlined text-primary">shield</span>
-                <h3 className="font-headline text-lg font-semibold text-on-surface">Privacy &amp; Security</h3>
-              </div>
-              <div className="space-y-4">
-                <button 
-                  onClick={handlePasswordReset}
-                  className="w-full py-2.5 px-4 rounded-lg bg-surface-container-lowest border border-outline-variant text-sm font-medium text-on-surface hover:bg-surface-variant transition-all flex items-center justify-between cursor-pointer"
-                >
-                  Change Password
-                  <span className="material-symbols-outlined text-sm">chevron_right</span>
-                </button>
+          {/* STUDY TAB */}
+          {activeTab === 'study' && (
+            <div className="tab-content-enter space-y-6">
+              <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-8">
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="material-symbols-outlined text-primary">school</span>
+                  <h3 className="font-headline text-xl font-semibold text-on-surface">Study Routine</h3>
+                </div>
                 
-                <div className="flex items-center justify-between px-1">
+                <div className="space-y-8">
                   <div>
-                    <span className="text-sm font-medium text-on-surface">Two-factor auth</span>
-                    {twoFactor && (
-                      <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/30 font-bold uppercase tracking-wide">Active</span>
-                    )}
-                  </div>
-                  {/* Styled slide toggle */}
-                  <button
-                    onClick={handle2faToggle}
-                    aria-pressed={twoFactor}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors duration-200 focus:outline-none ${
-                      twoFactor
-                        ? 'bg-primary-container border-primary/40'
-                        : 'bg-surface-container-highest border-outline-variant'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full shadow-md transition-transform duration-200 ${
-                        twoFactor
-                          ? 'translate-x-5 bg-on-primary-container'
-                          : 'translate-x-0.5 bg-on-surface-variant'
-                      }`}
+                    <div className="flex justify-between mb-4">
+                      <label className="text-xs font-bold text-on-surface-variant uppercase">Study Hours per Day</label>
+                      <span className="text-primary font-bold text-lg bg-primary/10 px-3 py-1 rounded-lg">{studyHours} Hours</span>
+                    </div>
+                    <input 
+                      className="w-full h-2 bg-surface-container-highest rounded-full appearance-none custom-slider cursor-pointer accent-primary mt-2" 
+                      max="12" min="1" type="range" value={studyHours} onChange={(e) => setStudyHours(Number(e.target.value))}
                     />
-                  </button>
-                </div>
-                
-                <div className="pt-4 border-t border-outline-variant/30 text-center">
-                  <button 
-                    onClick={handleDeleteAccount}
-                    className="text-error text-xs font-bold uppercase hover:underline tracking-widest cursor-pointer bg-transparent border-none"
-                  >
-                    Delete Account
-                  </button>
-                </div>
-              </div>
-            </section>
+                  </div>
+                  
+                  <div className="pt-4 border-t border-outline-variant/30">
+                    <label className="text-xs font-bold text-on-surface-variant uppercase block mb-4">Preferred Focus Session</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {['Morning', 'Afternoon', 'Night'].map((session) => (
+                        <button 
+                          key={session} onClick={() => setFocusSession(session)}
+                          className={`p-4 rounded-xl text-center font-bold border transition-all cursor-pointer flex flex-col items-center gap-2 ${
+                            focusSession === session 
+                              ? 'bg-secondary-container text-on-secondary-container border-primary/40 shadow-lg' 
+                              : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:bg-surface-variant hover:border-primary/20'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-2xl">
+                            {session === 'Morning' ? 'light_mode' : session === 'Afternoon' ? 'partly_cloudy_day' : 'dark_mode'}
+                          </span>
+                          {session}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-            {/* About & Help */}
-            <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <span className="material-symbols-outlined text-primary">info</span>
-                <h3 className="font-headline text-lg font-semibold text-on-surface">About &amp; Help</h3>
-              </div>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-on-surface-variant">App Version</span>
-                  <span className="font-mono text-primary">v1.0.4</span>
+                  <div className="pt-4 border-t border-outline-variant/30 flex items-center justify-between">
+                    <div>
+                      <span className="text-base font-bold text-on-surface block">Pomodoro Timer</span>
+                      <span className="text-sm text-on-surface-variant mt-1 block">Enable 25-minute focus intervals during study sessions.</span>
+                    </div>
+                    <ToggleSwitch checked={pomodoroEnabled} onChange={() => setPomodoroEnabled(!pomodoroEnabled)} />
+                  </div>
+
+                  <div className="pt-6 flex justify-end">
+                    <button onClick={handleSave} className="bg-primary-container text-on-primary-container py-3 px-8 rounded-xl font-bold hover:brightness-110 active:scale-95 transition-all text-sm cursor-pointer flex items-center gap-2">
+                      <span className="material-symbols-outlined text-sm">save</span> Save Preferences
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* APPEARANCE TAB */}
+          {activeTab === 'appearance' && (
+            <div className="tab-content-enter grid grid-cols-1 md:grid-cols-2 gap-6">
+              <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-8">
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="material-symbols-outlined text-primary">palette</span>
+                  <h3 className="font-headline text-xl font-semibold text-on-surface">Appearance</h3>
+                </div>
+                <div className="space-y-8">
+                  <div>
+                    <label className="text-xs font-bold text-on-surface-variant uppercase block mb-3">Theme Mode</label>
+                    <div className="bg-surface-container-lowest p-1.5 rounded-xl flex border border-outline-variant">
+                      {['light', 'dark', 'auto'].map(t => (
+                        <button 
+                          key={t}
+                          onClick={() => { dispatch(setTheme(t)); dispatch(showToast(`Theme switched to ${t.toUpperCase()}`)); }}
+                          className={`flex-1 py-3 text-sm font-bold capitalize transition-all cursor-pointer rounded-lg flex items-center justify-center gap-2 ${
+                            theme === t ? 'bg-surface-variant text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">
+                            {t === 'light' ? 'light_mode' : t === 'dark' ? 'dark_mode' : 'brightness_auto'}
+                          </span>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="text-xs font-bold text-on-surface-variant uppercase block mb-3">Accent Color</label>
+                    <div className="flex items-center gap-4 flex-wrap bg-surface-container-lowest p-4 rounded-xl border border-outline-variant">
+                      {ACCENT_PALETTES.map((palette) => (
+                        <button
+                          key={palette.id}
+                          title={palette.label}
+                          onClick={() => handleAccentChange(palette)}
+                          style={{ backgroundColor: palette.swatch }}
+                          className={`w-10 h-10 rounded-full cursor-pointer transition-all border-2 border-transparent hover:scale-110 ${
+                            accentColor === palette.id
+                              ? `ring-4 ring-offset-4 scale-110 ${isLight ? 'ring-gray-700 ring-offset-[#eae6ef]' : 'ring-white ring-offset-[#1d1a24]'}`
+                              : 'opacity-70 hover:opacity-100'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-8">
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="material-symbols-outlined text-primary">notifications_active</span>
+                  <h3 className="font-headline text-xl font-semibold text-on-surface">Notifications</h3>
+                </div>
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-base font-medium text-on-surface">Daily reminders</span>
+                    <ToggleSwitch checked={notifyDaily} onChange={() => setNotifyDaily(!notifyDaily)} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-base font-medium text-on-surface">Mock test alerts</span>
+                    <ToggleSwitch checked={notifyMockTest} onChange={() => setNotifyMockTest(!notifyMockTest)} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-base font-medium text-on-surface">AI suggestions</span>
+                    <ToggleSwitch checked={notifyAi} onChange={() => setNotifyAi(!notifyAi)} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-base font-medium text-on-surface">Streak alerts</span>
+                    <ToggleSwitch checked={notifyStreak} onChange={() => setNotifyStreak(!notifyStreak)} />
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* SECURITY TAB */}
+          {activeTab === 'security' && (
+            <div className="tab-content-enter space-y-6">
+              <section className="glass-card-settings rounded-2xl border-l-4 border-l-primary p-8">
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="material-symbols-outlined text-primary">shield</span>
+                  <h3 className="font-headline text-xl font-semibold text-on-surface">Privacy &amp; Security</h3>
                 </div>
                 
-                <button 
-                  onClick={() => navigate('/support')}
-                  className="block w-full py-2.5 px-4 rounded-lg bg-surface-container-lowest border border-outline-variant text-sm font-medium text-on-surface hover:bg-surface-variant transition-all text-center cursor-pointer"
-                >
-                  Contact Support
-                </button>
-                
-                <button 
-                  onClick={handleFeedback}
-                  className="w-full py-2.5 px-4 rounded-lg bg-primary/10 border border-primary/20 text-sm font-bold text-primary hover:bg-primary/20 transition-all cursor-pointer"
-                >
-                  Send Feedback
-                </button>
-              </div>
-            </section>
-
-          </div>
+                <div className="space-y-6 max-w-2xl">
+                  <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-on-surface text-base">Password</h4>
+                      <p className="text-sm text-on-surface-variant mt-1">Change your current account password.</p>
+                    </div>
+                    <button 
+                      onClick={handlePasswordReset}
+                      className="py-2 px-5 rounded-lg bg-primary-container text-on-primary-container font-bold hover:brightness-110 transition-all cursor-pointer text-sm flex items-center gap-2"
+                    >
+                      Update <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                    </button>
+                  </div>
+                  
+                  <div className="pt-6 border-t border-outline-variant/30 mt-8">
+                    <h4 className="font-bold text-error text-base mb-2">Danger Zone</h4>
+                    <p className="text-sm text-on-surface-variant mb-4">Once you delete your account, there is no going back. Please be certain.</p>
+                    <button 
+                      onClick={handleDeleteAccount}
+                      className="py-2.5 px-6 rounded-lg border-2 border-error/50 text-error font-bold hover:bg-error hover:text-white transition-all cursor-pointer text-sm"
+                    >
+                      Delete Account
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
 
         </div>
-
       </div>
     </div>
 
-      {/* ── Hidden file input for photo upload ── */}
-      <input
-        ref={photoInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handlePhotoSelected}
-      />
+    {/* ── Hidden file input for photo upload ── */}
+    <input
+      ref={photoInputRef}
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={handlePhotoSelected}
+    />
 
-      {/* ── 2FA Confirmation Modal ── */}
-      {show2faModal && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
-          onClick={() => setShow2faModal(false)}
-        >
-          <div
-            className="glass-card-settings rounded-2xl p-8 max-w-sm w-full mx-4 animate-fade-in-up"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-col items-center text-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center">
-                <span className="material-symbols-outlined text-primary text-3xl">security</span>
+    {/* ── Password Reset Modal ── */}
+    {showPasswordModal && (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center"
+        style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
+        onClick={() => setShowPasswordModal(false)}
+      >
+        <div className="glass-card-settings rounded-2xl p-8 max-w-sm w-full mx-4 animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="material-symbols-outlined text-primary text-2xl">lock_reset</span>
+              <h3 className="font-headline text-xl font-bold text-on-surface">Change Password</h3>
+            </div>
+            <div className="space-y-4 w-full">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-on-surface-variant uppercase px-1">New Password</label>
+                <input type="password" placeholder="Enter new password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none text-sm" />
               </div>
-              <h3 className="font-headline text-xl font-bold text-on-surface">Enable 2-Factor Auth?</h3>
-              <p className="text-on-surface-variant text-sm leading-relaxed">
-                Two-factor authentication adds an extra layer of security. A verification code will be required at each login.
-              </p>
-              <div className="flex gap-3 w-full mt-2">
-                <button
-                  onClick={() => setShow2faModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-outline-variant text-on-surface-variant text-sm font-bold hover:bg-surface-variant transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirm2faEnable}
-                  className="flex-1 py-2.5 rounded-xl bg-primary-container text-on-primary-container text-sm font-bold hover:brightness-110 transition-all cursor-pointer"
-                >
-                  Enable
-                </button>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-on-surface-variant uppercase px-1">Confirm Password</label>
+                <input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full bg-surface-container-lowest border-outline-variant rounded-lg p-3 text-on-surface focus:ring-2 focus:ring-primary/50 transition-all border outline-none text-sm" />
               </div>
+            </div>
+            <div className="flex gap-3 w-full mt-4">
+              <button onClick={() => setShowPasswordModal(false)} className="flex-1 py-2.5 rounded-xl border border-outline-variant text-on-surface-variant text-sm font-bold hover:bg-surface-variant transition-all cursor-pointer">Cancel</button>
+              <button onClick={handlePasswordSave} className="flex-1 py-2.5 rounded-xl bg-primary-container text-on-primary-container text-sm font-bold hover:brightness-110 transition-all cursor-pointer">Save</button>
             </div>
           </div>
         </div>
-      )}
-    </>
-  );
+      </div>
+    )}
+  </>);
 }

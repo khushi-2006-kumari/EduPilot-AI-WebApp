@@ -103,6 +103,10 @@ export default function MockTestResultsPage() {
               onMouseEnter={e => e.currentTarget.style.background = '#6D28D9'}
               onMouseLeave={e => e.currentTarget.style.background = '#7C3AED'}
             >Retake Test</button>
+            <button onClick={() => { setActiveTab('review'); document.getElementById('review-section')?.scrollIntoView({ behavior: 'smooth' }); }} style={{ padding: '12px 24px', background: C.surfaceContainer, color: C.onSurface, border: `1px solid ${C.outlineVar}`, borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer', transition: 'background 0.2s' }}
+              onMouseEnter={e => e.currentTarget.style.background = C.surfaceHigh}
+              onMouseLeave={e => e.currentTarget.style.background = C.surfaceContainer}
+            >Review Answers</button>
             <button style={{ padding: '12px 24px', background: C.surfaceContainer, color: C.onSurface, border: `1px solid ${C.outlineVar}`, borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer', transition: 'background 0.2s' }}
               onMouseEnter={e => e.currentTarget.style.background = C.surfaceHigh}
               onMouseLeave={e => e.currentTarget.style.background = C.surfaceContainer}
@@ -133,7 +137,7 @@ export default function MockTestResultsPage() {
       </div>
 
       {/* Main Content */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 32 }}>
+      <div id="review-section" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 32 }}>
         <div>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 4, background: C.surfaceLow, padding: 4, borderRadius: 12, marginBottom: 24 }}>

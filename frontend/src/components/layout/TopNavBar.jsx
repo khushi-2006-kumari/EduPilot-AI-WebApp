@@ -24,6 +24,7 @@ export function TopNavBar({
   const isLight = useIsLight();
 
   const [profileOpen, setProfileOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const dropdownRef = useRef(null); //useRef gives you direct access to the actual DOM element
 
   // Close dropdown when clicking outside
@@ -59,8 +60,86 @@ export function TopNavBar({
     { icon: 'person', label: 'My Profile', action: () => { navigate('/settings'); setProfileOpen(false); } },
     { icon: 'query_stats', label: 'My Analytics', action: () => { navigate('/analytics'); setProfileOpen(false); } },
     { icon: 'workspace_premium', label: 'Upgrade Plan', action: () => { triggerToast('💎 Upgrade flow coming soon!'); setProfileOpen(false); } },
-    { icon: 'help_outline', label: 'Help & Support', action: () => { navigate('/support'); setProfileOpen(false); } },
   ];
+
+  const handleSearch = (e) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      
+      const routeMap = {
+        'dashboard': '/dashboard',
+        'home': '/dashboard',
+        'syllabus': '/syllabus',
+        'planner': '/planner',
+        'study planner': '/planner',
+        'notes': '/notes',
+        'revision': '/revision',
+        'smart revision': '/revision',
+        'mocktest': '/mocktest',
+        'mock test': '/mocktest',
+        'test': '/mocktest',
+        'chat': '/chat',
+        'doubt': '/chat',
+        'analytics': '/analytics',
+        'focus': '/focus',
+        'settings': '/settings',
+        'support': '/support',
+        'help': '/support',
+        'session': '/session',
+      };
+
+      // Exact match
+      if (routeMap[query]) {
+        navigate(routeMap[query]);
+        setSearchQuery('');
+        return;
+      }
+      
+      // Partial match
+      for (const [key, path] of Object.entries(routeMap)) {
+        if (key.includes(query) || query.includes(key)) {
+          navigate(path);
+          setSearchQuery('');
+          return;
+        }
+      }
+
+      triggerToast(`Searching for "${searchQuery}"...`);
+    }
+  };
+
+  const handleVoiceSearch = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      triggerToast("🎙️ Voice search is not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      triggerToast("🎙️ Listening... Speak now.");
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setSearchQuery(transcript);
+    };
+
+    recognition.onerror = () => {
+      triggerToast("🎙️ Error listening. Please try again.");
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
 
   return (
     <header className="fixed top-0 left-[288px] right-0 z-40 flex justify-between items-center h-20 px-10 bg-background/80 backdrop-blur-md border-b border-outline-variant/10">
@@ -72,24 +151,18 @@ export function TopNavBar({
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearch}
             className="w-full bg-surface-container-lowest/50 border border-outline-variant/20 rounded-full py-2.5 pl-12 pr-20 text-sm focus:ring-1 focus:ring-primary-container/50 text-on-surface placeholder:text-outline transition-all"
             placeholder="Search for topics, notes, or concepts..."
             type="text"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <button
-              onClick={() => triggerToast("🎙️ Voice search activated (Demo).")}
-              className="p-1.5 text-outline hover:text-primary transition-colors flex items-center justify-center rounded-full hover:bg-surface-container-high/60 cursor-pointer"
+              onClick={handleVoiceSearch}
+              className={`p-1.5 transition-colors flex items-center justify-center rounded-full hover:bg-surface-container-high/60 cursor-pointer ${isListening ? 'text-primary animate-pulse' : 'text-outline hover:text-primary'}`}
               title="Voice Search"
             >
               <span className="material-symbols-outlined text-lg">mic</span>
-            </button>
-            <button
-              onClick={() => triggerToast("📷 Document/QR scanner activated (Demo).")}
-              className="p-1.5 text-outline hover:text-primary transition-colors flex items-center justify-center rounded-full hover:bg-surface-container-high/60 cursor-pointer"
-              title="Scan Document"
-            >
-              <span className="material-symbols-outlined text-lg">qr_code_scanner</span>
             </button>
           </div>
         </div>
@@ -101,26 +174,6 @@ export function TopNavBar({
         {/* Theme Switcher */}
         <ThemeSwitcher value={theme} onChange={(val) => dispatch(setTheme(val))} />
 
-        <div className="h-8 w-[1px] bg-outline-variant/30 mx-1" />
-
-        {/* Notifications */}
-        <button
-          onClick={() => triggerToast("🔔 No new notifications right now.")}
-          className="relative text-on-surface-variant hover:text-primary transition-colors p-2 bg-surface-container-high/40 rounded-full border border-outline-variant/10 flex items-center justify-center cursor-pointer"
-          title="Notifications"
-        >
-          <span className="material-symbols-outlined">notifications</span>
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full border-2 border-background" />
-        </button>
-
-        {/* Settings shortcut */}
-        <button
-          onClick={onSettingsClick}
-          className="text-on-surface-variant hover:text-primary transition-colors p-2 bg-surface-container-high/40 rounded-full border border-outline-variant/10 flex items-center justify-center cursor-pointer"
-          title="Settings"
-        >
-          <span className="material-symbols-outlined">settings</span>
-        </button>
 
         <div className="h-8 w-[1px] bg-outline-variant/30 mx-1" />
 
